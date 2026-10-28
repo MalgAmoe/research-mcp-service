@@ -1,0 +1,8 @@
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app
+WORKDIR /app
+RUN mkdir -p /egress /app/research_mcp_service && chown 10001:10001 /egress
+COPY src/research_mcp_service/__init__.py src/research_mcp_service/egress.py src/research_mcp_service/egress_bridge.py /app/research_mcp_service/
+COPY scripts/check_worker_egress.py /app/check_worker_egress.py
+USER 10001:10001
+CMD ["python", "-m", "research_mcp_service.egress"]

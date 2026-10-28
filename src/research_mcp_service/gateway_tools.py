@@ -7,6 +7,7 @@ from pydantic import AfterValidator, Field, HttpUrl
 from mcp.server.mcpserver.exceptions import ToolError
 
 from .gateway import GatewayCalls
+from .output import clean_text, compact_sources
 
 
 def _url(value: str) -> str:
@@ -52,11 +53,25 @@ def public_view(value):
     return result
 
 
-def register_gateway_tools(server, backend, *, timeout=90):
+def register_gateway_tools(server, backend, *, timeout=90, research_search=None):
     call = GatewayCalls(backend, timeout=timeout)
 
     async def request(method, path, **kwargs):
-        return public_view(await call(method, path, **kwargs))
+        compact = path in {'/batch_fetch', '/research', '/documents/recent'}
+        if compact:
+            for key in ('payload', 'params'):
+                if key in kwargs:
+                    kwargs[key] = {**kwargs[key], 'include_markdown': False}
+        result = public_view(await call(method, path, **kwargs))
+        if compact:
+            return compact_sources(result)
+        if path in {'/read_url', '/convert_document'} and isinstance(result, dict) and result.get('markdown'):
+            text = clean_text(result['markdown'])
+            result['markdown'] = text[:12000]
+            result['text_range'] = {'offset': 0, 'returned_characters': len(result['markdown']),
+                'total_characters': len(text), 'next_offset': 12000 if len(text) > 12000 else None,
+                'continuation_tool': 'web_document', 'coordinate_space': 'markdown_with_embedded_images_omitted'}
+        return result
 
     @server.tool(annotations=LOCAL_READ)
     async def web_capabilities() -> dict[str, Any]:
@@ -83,7 +98,11 @@ def register_gateway_tools(server, backend, *, timeout=90):
                               force_refresh: bool = False, include_markdown: bool = False,
                               include_diagnostics: bool = True,
                               max_concurrency: Annotated[int, Field(ge=1, le=10)] = 5) -> dict[str, Any]:
-        """Read 1–15 selected public URLs. Returns saved sources and per-URL failures."""
+        """Read 1–15 URLs; return compact sources and separate failures, not full text.
+
+        Full text stays cached; use web_document for selected sources. include_markdown is
+        retained for client compatibility but batches always return summaries.
+        """
         _profile(strategy, browser_profile)
         return await request('POST', '/batch_fetch', payload=dict(urls=urls, strategy=strategy,
             browser_profile=browser_profile, force_refresh=force_refresh, include_markdown=include_markdown,
@@ -103,6 +122,13 @@ def register_gateway_tools(server, backend, *, timeout=90):
         if not query:
             raise ToolError('Enter a nonempty research query.')
         _profile(read_strategy, browser_profile)
+        if research_search is not None:
+            results = await research_search(query, max_sources, freshness)
+            urls = list(dict.fromkeys(_url(item['url']) for item in results.get('results', []) if item.get('url')))[:max_sources]
+            fetched = await request('POST', '/batch_fetch', payload=dict(urls=urls,
+                strategy=read_strategy, browser_profile=browser_profile, include_markdown=include_markdown,
+                max_concurrency=2)) if urls else {'documents': [], 'failed_urls': []}
+            return {'query': query, 'search': results, **fetched}
         return await request('POST', '/research', payload=dict(query=query, max_sources=max_sources,
             read_strategy=read_strategy, browser_profile=browser_profile, freshness=freshness,
             include_markdown=include_markdown))
@@ -118,9 +144,56 @@ def register_gateway_tools(server, backend, *, timeout=90):
                                                                        include_markdown=include_markdown))
 
     @server.tool(annotations=LOCAL_READ)
-    async def web_document(doc_id: Identifier, include_markdown: bool = False) -> dict[str, Any]:
-        """Retrieve a previously saved document from your private cache, without fetching its source."""
-        return await request('GET', f'/documents/{doc_id}', params={'include_markdown': include_markdown})
+    async def web_document(doc_id: Identifier, include_markdown: bool = False,
+                           offset: Annotated[int, Field(ge=0)] = 0,
+                           max_chars: Annotated[int, Field(ge=1, le=30000)] = 12000) -> dict[str, Any]:
+        """Retrieve cached metadata or a bounded Markdown passage without refetching.
+
+        Set include_markdown=true; follow text_range.next_offset for subsequent passages.
+        Offsets count characters after embedded image data is omitted. Originals stay unchanged.
+        """
+        if offset and not include_markdown:
+            raise ToolError('offset requires include_markdown=true')
+        result = await request('GET', f'/documents/{doc_id}', params={'include_markdown': include_markdown})
+        if include_markdown and isinstance(result.get('markdown'), str):
+            text = clean_text(result['markdown'])
+            result['markdown'] = text[offset:offset + max_chars]
+            end = offset + len(result['markdown'])
+            result['text_range'] = {'offset': offset, 'returned_characters': len(result['markdown']),
+                'total_characters': len(text), 'next_offset': end if end < len(text) else None,
+                'coordinate_space': 'markdown_with_embedded_images_omitted'}
+        return result
+
+    @server.tool(annotations=LOCAL_READ)
+    async def web_document_find(doc_id: Identifier,
+                                query: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
+                                heading: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
+                                occurrence: Annotated[int, Field(ge=1, le=1000)] = 1,
+                                max_chars: Annotated[int, Field(ge=1, le=30000)] = 12000) -> dict[str, Any]:
+        """Find a literal phrase or Markdown heading in a cached document; no new fetch.
+
+        Choose query OR heading. Matching is case-insensitive; heading matches a substring of
+        an ATX (#) heading, excluding fenced code. occurrence selects repeated matches.
+        Returns a bounded passage and absolute offsets usable with web_document. Phrase
+        results include up to 300 preceding characters. A heading includes its subsections.
+        """
+        from .passages import locate
+        if (query is None) == (heading is None) or not (query or heading or '').strip():
+            raise ToolError('Provide exactly one nonempty query or heading.')
+        document = await request('GET', f'/documents/{doc_id}', params={'include_markdown': True})
+        text = clean_text(document.get('markdown') or '')
+        match, count = locate(text, heading, query, occurrence)
+        result = {'doc_id': doc_id, 'url': document.get('url'), 'title': document.get('title'),
+                  'matches': count, 'occurrence': occurrence, 'found': match is not None,
+                  'coordinate_space': 'markdown_with_embedded_images_omitted'}
+        if match is not None:
+            start = match['start'] if heading is not None else max(0, match['match_offset'] - min(300, max_chars // 4))
+            end = min(match['end'], start + max_chars)
+            result.update(markdown=text[start:end], offset=start, end_offset=end,
+                          next_offset=end if end < match['end'] else None,
+                          section_end_offset=match['end'] if heading is not None else None,
+                          match_offset=match['match_offset'])
+        return result
 
     @server.tool(annotations=LOCAL_READ)
     async def web_recent_documents(limit: Annotated[int, Field(ge=1, le=100)] = 20,

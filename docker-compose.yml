@@ -1,5 +1,6 @@
 # ONE private person's backend, NOT a publicly deployable MCP service.
-# No published ports; authentication, MCP ingress and egress enforcement are TODO.
+# Default startup is storage-only. The engine profile remains undeployed/unsafe for remote fetching.
+# No published ports; authentication, MCP ingress and fetch-worker egress enforcement are TODO.
 name: research-mcp-${TENANT_ID:?Set a unique TENANT_ID in this project configuration}
 
 x-logging: &logging
@@ -10,6 +11,7 @@ x-logging: &logging
 
 services:
   redis:
+    networks: [storage]
     image: redis@sha256:b9646e7cdf8165d985b88bb3e61b3f2f7625db7f6c98af79def91997d04f26b9
     logging: *logging
     mem_limit: 512m
@@ -26,6 +28,7 @@ services:
       retries: 5
 
   minio:
+    networks: [storage]
     image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     logging: *logging
     mem_limit: 1g
@@ -45,6 +48,8 @@ services:
       retries: 5
 
   gateway:
+    profiles: [engine]
+    networks: [default, storage]
     build: .
     image: research-mcp-service-backend:dev
     logging: *logging
@@ -80,6 +85,7 @@ services:
       retries: 5
 
   searxng:
+    profiles: [engine]
     image: searxng/searxng@sha256:23482d8ecf7ddf66029479468ea04c1bb11d2b65785a17a7e629e2ffd13296ca
     logging: *logging
     mem_limit: 1g
@@ -99,6 +105,10 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+
+networks:
+  storage:
+    internal: true
 
 volumes:
   redis_data:

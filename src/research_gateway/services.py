@@ -630,6 +630,11 @@ def _raise_if_read_url_document(url: str, content_type: str | None) -> None:
 
 
 async def _fetch_html(url: str) -> str:
+    if settings.fetch_proxy:
+        from research_mcp_service.worker_io import download
+        response = await download(url, max_bytes=5 * 1024 * 1024)
+        _raise_if_read_url_document(url, response.headers.get("content-type"))
+        return response.text
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
             response = await client.get(url, headers={"User-Agent": "local-web-research-gateway/0.1"})
@@ -664,6 +669,11 @@ def _extract_title(html: str) -> str | None:
 async def _read_with_strategy(
     req: ReadUrlRequest,
 ) -> tuple[str | None, str, str, ReadStrategy, list[ExtractionAttempt], str | None]:
+    if settings.worker_socket:
+        from research_mcp_service.worker_client import get_worker
+        data = await get_worker(settings.worker_socket).run('read', req.model_dump(mode='json'))
+        return (data['title'], data['markdown'], data['method'], ReadStrategy(data['strategy_used']),
+                [ExtractionAttempt.model_validate(item) for item in data['attempts']], data['raw_html'])
     url = str(req.url)
     attempts: list[ExtractionAttempt] = []
 
@@ -779,9 +789,13 @@ async def _extract_with_playwright(url: str, *, structured: bool = False) -> tup
     browser = None
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            proxy_options = {"proxy": {"server": settings.fetch_proxy, "bypass": "<-loopback>"}} if settings.fetch_proxy else {}
+            browser = await p.chromium.launch(headless=True, **proxy_options)
             page = await browser.new_page()
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            if response is not None and response.status >= 400:
+                raise GatewayError('browser_bad_status', 'URL returned an unsuccessful HTTP status',
+                                   status_code=502, http_status=response.status)
             try:
                 await page.wait_for_load_state("networkidle", timeout=5000)
             except Exception:
@@ -841,9 +855,15 @@ async def _extract_with_camoufox(url: str) -> tuple[str, str | None, str, Extrac
 
     started = time.perf_counter()
     try:
-        async with AsyncCamoufox(headless=True, block_images=True, block_webrtc=True) as browser:
+        proxy_options = {"proxy": {"server": settings.fetch_proxy},
+                         "firefox_user_prefs": {"network.proxy.allow_hijacking_localhost": True,
+                                                "network.proxy.no_proxies_on": ""}} if settings.fetch_proxy else {}
+        async with AsyncCamoufox(headless=True, block_images=True, block_webrtc=True, **proxy_options) as browser:
             page = await browser.new_page()
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            if response is not None and response.status >= 400:
+                raise GatewayError('browser_bad_status', 'URL returned an unsuccessful HTTP status',
+                                   status_code=502, http_status=response.status)
             try:
                 await page.wait_for_load_state("networkidle", timeout=5000)
             except Exception:
@@ -1026,32 +1046,10 @@ async def batch_fetch(req: BatchFetchRequest) -> BatchFetchResponse:
 
 
 async def convert_document(req: ConvertDocumentRequest) -> ConvertedDocument:
+    from .document_io import prepare_document
     url = str(req.url)
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
-            response = await client.get(url, headers={"User-Agent": "local-web-research-gateway/0.1"})
-            response.raise_for_status()
-            data = response.content
-            content_type = response.headers.get("content-type")
-    except httpx.HTTPStatusError as exc:
-        raise GatewayError(
-            "fetch_bad_status",
-            "Document URL returned an unsuccessful HTTP status",
-            status_code=502,
-            url=url,
-            http_status=exc.response.status_code,
-        ) from exc
-    except httpx.HTTPError as exc:
-        raise GatewayError(
-            "fetch_failed",
-            "Could not fetch document URL",
-            status_code=502,
-            url=url,
-            cause=str(exc),
-        ) from exc
-
+    data, content_type, suffix, markdown = await prepare_document(req)
     doc_id = _doc_id(url, data[:2048].hex())
-    suffix = _suffix_for_document(url, content_type)
 
     try:
         original_uri = artifact_store.put_bytes(
@@ -1064,26 +1062,6 @@ async def convert_document(req: ConvertDocumentRequest) -> ConvertedDocument:
         raise GatewayError(
             "artifact_store_failed",
             "Could not store source document",
-            status_code=502,
-            url=url,
-            cause=str(exc),
-        ) from exc
-
-    if req.strategy == DocumentStrategy.structured:
-        raise GatewayError(
-            "document_strategy_not_implemented",
-            "Structured document conversion is reserved for a future heavy backend",
-            status_code=400,
-            url=url,
-            strategy=req.strategy.value,
-        )
-
-    try:
-        markdown = await _convert_document_content(data, suffix)
-    except Exception as exc:
-        raise GatewayError(
-            "document_conversion_failed",
-            "Could not convert document",
             status_code=502,
             url=url,
             cause=str(exc),
@@ -1280,6 +1258,25 @@ async def get_job(job_id: str) -> Job | None:
 import xml.etree.ElementTree as ET  # noqa: E402
 
 
+async def _fetch_parsed_feed(feed_url: str) -> dict[str, Any]:
+    if settings.worker_socket:
+        from research_mcp_service.worker_client import get_worker
+        return await get_worker(settings.worker_socket).run('feed', {'feed_url': feed_url})
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+            response = await client.get(feed_url, headers={
+                'User-Agent': 'local-web-research-gateway/0.1',
+                'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+            })
+            response.raise_for_status()
+    except httpx.HTTPError:
+        raise GatewayError('rss_fetch_failed', 'Could not fetch RSS feed', status_code=502) from None
+    try:
+        return _parse_rss_feed(response.text, feed_url)
+    except Exception:
+        raise GatewayError('rss_parse_failed', 'Could not parse RSS feed', status_code=502) from None
+
+
 def _feed_key(feed_url: str) -> str:
     return hashlib.sha256(feed_url.encode()).hexdigest()[:16]
 
@@ -1310,27 +1307,12 @@ async def rss_fetch(feed_url: str, max_entries: int = 20, force_refresh: bool = 
         feed = RssFeed(feed_url=feed_url)
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-            response = await client.get(
-                feed_url,
-                headers={
-                    "User-Agent": "local-web-research-gateway/0.1",
-                    "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
-                },
-            )
-            response.raise_for_status()
-            xml_text = response.text
-    except httpx.HTTPError as exc:
-        feed = feed.model_copy(update={"fetch_status": "error", "fetch_error": str(exc), "last_fetched_at": datetime.now(timezone.utc)})
+        parsed = await _fetch_parsed_feed(feed_url)
+    except GatewayError as exc:
+        feed = feed.model_copy(update={"fetch_status": "error", "fetch_error": exc.message,
+                                       "last_fetched_at": datetime.now(timezone.utc)})
         await redis_store.save_rss_feed(key, feed)
-        raise GatewayError("rss_fetch_failed", f"Could not fetch RSS feed: {exc}", status_code=502, url=feed_url) from exc
-
-    try:
-        parsed = _parse_rss_feed(xml_text, feed_url)
-    except Exception as exc:
-        feed = feed.model_copy(update={"fetch_status": "error", "fetch_error": f"Parse error: {exc}", "last_fetched_at": datetime.now(timezone.utc)})
-        await redis_store.save_rss_feed(key, feed)
-        raise GatewayError("rss_parse_failed", f"Could not parse RSS feed: {exc}", status_code=502, url=feed_url) from exc
+        raise
 
     feed_title = parsed.get("title")
     feed_description = parsed.get("description")
@@ -1371,24 +1353,7 @@ async def rss_fetch(feed_url: str, max_entries: int = 20, force_refresh: bool = 
 
 async def rss_preview(feed_url: str, max_entries: int = 20) -> RssFetchResponse:
     """Fetch a feed once and return entries without persisting subscription state."""
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-            response = await client.get(
-                feed_url,
-                headers={
-                    "User-Agent": "local-web-research-gateway/0.1",
-                    "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
-                },
-            )
-            response.raise_for_status()
-            xml_text = response.text
-    except httpx.HTTPError as exc:
-        raise GatewayError("rss_fetch_failed", f"Could not fetch RSS feed: {exc}", status_code=502, url=feed_url) from exc
-
-    try:
-        parsed = _parse_rss_feed(xml_text, feed_url)
-    except Exception as exc:
-        raise GatewayError("rss_parse_failed", f"Could not parse RSS feed: {exc}", status_code=502, url=feed_url) from exc
+    parsed = await _fetch_parsed_feed(feed_url)
 
     feed_title = parsed.get("title")
     feed_description = parsed.get("description")

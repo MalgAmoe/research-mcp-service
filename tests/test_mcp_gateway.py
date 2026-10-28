@@ -19,6 +19,7 @@ CASES = [
     ('web_batch_fetch', {'urls': [URL]}, 'POST', '/batch_fetch', {'payload': dict(urls=[URL], strategy='light', browser_profile='standard', force_refresh=False, include_markdown=False, include_diagnostics=True, max_concurrency=5)}),
     ('web_research', {'query': ' research '}, 'POST', '/research', {'payload': dict(query='research', max_sources=5, read_strategy='light', browser_profile='standard', freshness='any', include_markdown=False)}),
     ('web_convert_document', {'url': URL}, 'POST', '/convert_document', {'payload': dict(url=URL, strategy='text', include_markdown=False)}),
+    ('web_document_find', {'doc_id': 'doc_123', 'query': 'example'}, 'GET', '/documents/doc_123', {'params': {'include_markdown': True}}),
     ('web_document', {'doc_id': 'doc_123'}, 'GET', '/documents/doc_123', {'params': {'include_markdown': False}}),
     ('web_recent_documents', {}, 'GET', '/documents/recent', {'params': {'limit': 20, 'include_markdown': False}}),
     ('web_artifact', {'doc_id': 'doc_123', 'kind': 'markdown'}, 'GET', '/documents/doc_123/artifacts/markdown', {'artifact': True}),

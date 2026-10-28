@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Settings:
+    fetch_proxy: str | None = os.getenv("FETCH_PROXY")
+    worker_socket: str | None = os.getenv("WORKER_SOCKET")
     searxng_url: str = os.getenv("SEARXNG_URL", "http://searxng:8080")
     search_provider: str = os.getenv("SEARCH_PROVIDER", "auto").lower()
     ddgs_backend: str = os.getenv(

@@ -1,0 +1,45 @@
+# Private authenticated control plane; no default-network/Internet attachment.
+services:
+  control:
+    profiles: [control]
+    build:
+      context: .
+      dockerfile: Dockerfile.control
+    image: research-mcp-control:dev
+    networks: [storage]
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 128
+    restart: unless-stopped
+    tmpfs: ["/tmp:size=67108864,mode=1777"]
+    volumes: ["worker_rpc:/rpc:ro"]
+    env_file: [.env.control]
+    environment:
+      WORKER_SOCKET: /rpc/worker.sock
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set unique MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set unique MINIO_SECRET_KEY}
+      MINIO_SECURE: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      fetch-worker:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import os,urllib.request; r=urllib.request.Request('http://127.0.0.1:8000/health',headers={'Authorization':'Bearer '+os.environ['GATEWAY_TOKEN']}); urllib.request.urlopen(r,timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

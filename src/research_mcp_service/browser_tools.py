@@ -32,7 +32,15 @@ def register_browser_tools(server, backend, *, timeout=45):
         result = dict(result)
         image = result.pop('screenshot_base64', None)
         if result.get('error'):
-            raise ToolError('Browser operation failed. Observe the session before retrying an action.')
+            code = result['error'].get('code') if isinstance(result['error'], dict) else None
+            messages = {
+                'session_not_found': 'Browser session expired or is not owned by this worker. Open a new session.',
+                'session_limit': 'Four browser sessions are already open. Close one before opening another.',
+                'screenshot_limit': 'Screenshot exceeds 1 MiB. Use a viewport screenshot or a smaller viewport.',
+                'browser_busy': 'A browser action is already running. Retry shortly.',
+                'browser_reset': 'Browser worker restarted; previous sessions expired. An action may already have happened—do not blindly repeat it.',
+            }
+            raise ToolError(messages.get(code, 'Browser operation failed. Observe the session before retrying an action.'))
         content = [TextContent(type='text', text=json.dumps(result, ensure_ascii=False))]
         if image:
             try:

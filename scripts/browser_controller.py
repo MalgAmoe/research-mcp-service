@@ -18,6 +18,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
 
 @dataclass
@@ -39,8 +40,16 @@ class BrowserSession:
 
 
 sessions: dict[str, BrowserSession] = {}
-MAX_SESSIONS = max(1, int(os.getenv("PI_BROWSER_MAX_SESSIONS", "8")))
-IDLE_TIMEOUT_SECONDS = max(60, int(os.getenv("PI_BROWSER_IDLE_TIMEOUT_SECONDS", "1800")))
+MAX_SESSIONS = max(1, min(4, int(os.getenv("RESEARCH_BROWSER_MAX_SESSIONS", "4"))))
+IDLE_TIMEOUT_SECONDS = max(60, min(1800, int(os.getenv("RESEARCH_BROWSER_IDLE_TIMEOUT_SECONDS", "1800"))))
+FETCH_PROXY = os.getenv('FETCH_PROXY')
+
+
+def _web_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        raise ValueError('Only HTTP(S) URLs without credentials are supported')
+    return url
 
 
 def _get_session(session_id: str) -> BrowserSession:
@@ -95,15 +104,15 @@ OBSERVE_JS = r"""
     return ['a','button','input','textarea','select','summary','form'].includes(tag) ||
       /^h[1-6]$/.test(tag) || el.getAttribute('role') || el.onclick || el.getAttribute('tabindex');
   }
+  // Refs belong to this observation. Clear old/forged refs, including hidden
+  // nodes, so dynamically inserted elements cannot collide with an old e1.
+  for (const el of document.querySelectorAll('[data-pi-ref]')) el.removeAttribute('data-pi-ref');
   const nodes = [];
   let n = 1;
   for (const el of Array.from(document.querySelectorAll('body *'))) {
     if (!visible(el) || !isInteresting(el)) continue;
-    let ref = el.getAttribute('data-pi-ref');
-    if (!ref) {
-      ref = 'e' + n++;
-      el.setAttribute('data-pi-ref', ref);
-    }
+    const ref = 'e' + n++;
+    el.setAttribute('data-pi-ref', ref);
     const role = roleOf(el);
     const name = nameOf(el);
     const attrs = [];
@@ -170,24 +179,26 @@ async def _maybe_block_resources(context: Any, block_resources: bool) -> None:
 async def open_session(params: dict[str, Any]) -> dict[str, Any]:
     await expire_idle_sessions()
     if len(sessions) >= MAX_SESSIONS:
-        oldest = min(sessions.values(), key=lambda item: item.last_used_at)
-        await close_session({"session_id": oldest.session_id, "reason": "session_limit"})
+        raise ValueError('Browser session limit reached; close an existing session first')
 
-    url = params["url"]
+    url = _web_url(params["url"])
     profile = params.get("profile", "standard")
     headless = params.get("headless", True)
+    if headless is not True:
+        raise ValueError('Only headless sessions are supported')
     block_resources = params.get("block_resources", False)
     viewport = params.get("viewport") or {"width": 1365, "height": 900}
     locale = params.get("locale")
     timezone = params.get("timezone")
 
-    session_id = "br_" + uuid.uuid4().hex[:12]
+    session_id = "br_" + uuid.uuid4().hex
 
     if profile == "standard":
         from playwright.async_api import async_playwright  # type: ignore
 
         pw = await async_playwright().start()
-        browser = await pw.chromium.launch(headless=headless)
+        proxy_options = {'proxy': {'server': FETCH_PROXY, 'bypass': '<-loopback>'}} if FETCH_PROXY else {}
+        browser = await pw.chromium.launch(headless=headless, **proxy_options)
         context_kwargs: dict[str, Any] = {"viewport": viewport}
         if locale:
             context_kwargs["locale"] = locale
@@ -201,7 +212,11 @@ async def open_session(params: dict[str, Any]) -> dict[str, Any]:
         from camoufox.async_api import AsyncCamoufox  # type: ignore
 
         humanize = params.get("humanize", True)
+        proxy_options = {'proxy': {'server': FETCH_PROXY},
+                         'firefox_user_prefs': {'network.proxy.allow_hijacking_localhost': True,
+                                                'network.proxy.no_proxies_on': ''}} if FETCH_PROXY else {}
         manager = AsyncCamoufox(
+            **proxy_options,
             headless=headless,
             humanize=humanize,
             block_webrtc=True,
@@ -242,6 +257,8 @@ async def observe_session(params: dict[str, Any]) -> dict[str, Any]:
     screenshot_b64 = None
     if params.get("include_screenshot", False):
         png = await page.screenshot(full_page=bool(params.get("full_page", False)))
+        if len(png) > 1024 * 1024:
+            raise ValueError('Screenshot exceeds 1 MiB; try a viewport screenshot or smaller viewport')
         screenshot_b64 = base64.b64encode(png).decode("ascii")
     return {
         "session_id": session.session_id,
@@ -272,7 +289,7 @@ async def _element_by_ref(page: Any, ref: str) -> Any:
 async def goto_session(params: dict[str, Any]) -> dict[str, Any]:
     session = _get_session(params["session_id"])
     response = await session.page.goto(
-        params["url"],
+        _web_url(params["url"]),
         wait_until=params.get("wait_until", "domcontentloaded"),
         timeout=params.get("timeout_ms", 30000),
     )

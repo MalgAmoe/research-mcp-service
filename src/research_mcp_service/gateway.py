@@ -18,13 +18,18 @@ MAX_ARTIFACT_BYTES = 256 * 1024
 
 
 class GatewayClient:
-    def __init__(self, endpoint: str, *, transport=None):
+    def __init__(self, endpoint: str, *, token: str | None = None, transport=None):
         parsed = urlsplit(endpoint)
         if (parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username
                 or parsed.password or parsed.path not in {'', '/'} or parsed.query or parsed.fragment):
             raise ValueError('A fixed gateway origin without credentials or path is required')
+        if token is not None and (len(token) < 32 or not token.isascii() or any(c.isspace() for c in token)):
+            raise ValueError('A strong ASCII backend bearer token without whitespace is required')
         self.endpoint = endpoint.rstrip('/')
         self.transport = transport
+        self.headers = {'Accept-Encoding': 'identity'}
+        if token is not None:
+            self.headers['Authorization'] = 'Bearer ' + token
 
     async def __call__(self, method: str, path: str, *, payload=None, params=None, artifact=False):
         # Paths originate in fixed tool adapters, never a client-supplied route.
@@ -33,13 +38,31 @@ class GatewayClient:
         bound = MAX_ARTIFACT_BYTES if artifact else MAX_RESPONSE_BYTES
         async with httpx.AsyncClient(base_url=self.endpoint, transport=self.transport,
                                     trust_env=False, follow_redirects=False, timeout=90,
-                                    headers={'Accept-Encoding': 'identity'}) as client:
+                                    headers=self.headers) as client:
             async with client.stream(method, path, json=payload, params=params) as response:
                 if response.status_code == 404:
                     raise ToolError('The requested document, artifact or feed entry was not found.')
                 if response.status_code == 503:
                     raise ToolError('The research backend is busy or undergoing maintenance. Retry later.')
                 if response.status_code >= 300:
+                    from .error_details import safe_error
+                    error_body = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=4096):
+                        if len(error_body) + len(chunk) > 16384:
+                            break
+                        error_body.extend(chunk)
+                    try:
+                        payload = json.loads(error_body)
+                        safe = safe_error(payload.get('detail', payload))
+                    except (ValueError, AttributeError, TypeError):
+                        safe = {}
+                    if safe:
+                        message = safe.get('message', 'Website request failed.')
+                        if 'http_status' in safe:
+                            message += f" Upstream HTTP {safe['http_status']}."
+                        if 'code' in safe:
+                            message += f" [{safe['code']}]"
+                        raise ToolError(message)
                     raise ToolError('The research backend could not complete this request.')
                 if response.headers.get('content-encoding', 'identity').lower() != 'identity':
                     raise ToolError('Unexpected compressed backend response.')
