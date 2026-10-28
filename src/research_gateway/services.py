@@ -143,20 +143,18 @@ async def _search_ddgs(req: SearchWebRequest) -> SearchWebResponse:
         # wider internal pool makes metasearch genuinely multi-provider; only
         # the caller's requested number is returned below.
         internal_limit = max(req.limit, 30)
-        backend = "auto" if req.category == "news" else settings.ddgs_backend
         last_error: Exception | None = None
         for _ in range(3):
             try:
                 client = DDGS(timeout=15)
-                method = client.news if req.category == "news" else client.text
-                results = method(
+                results = client.text(
                     query,
                     region=settings.ddgs_region,
                     safesearch="moderate",
                     timelimit=timelimit,
                     max_results=internal_limit,
                     page=req.page,
-                    backend=backend,
+                    backend=settings.ddgs_backend,
                 )
                 if results:
                     return results

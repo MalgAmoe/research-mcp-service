@@ -51,7 +51,7 @@ class SearchWebRequest(BaseModel):
     query: str = Field(min_length=1)
     limit: int = Field(default=10, ge=1, le=50)
     freshness: Freshness = Freshness.any
-    category: Literal["general", "news"] = "general"
+    category: Literal["general"] = "general"
     page: int = Field(default=1, ge=1, le=10)
     language: str | None = None
     include_domains: list[str] = Field(default_factory=list)

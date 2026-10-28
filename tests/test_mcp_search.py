@@ -27,6 +27,8 @@ class SearchToolTests(unittest.TestCase):
             response = client.post('/mcp', headers=HEADERS, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
             tools = response.json()['result']['tools']
             self.assertEqual({t['name'] for t in tools}, {'health', 'search'})
+            schema = next(t for t in tools if t['name'] == 'search')['inputSchema']
+            self.assertNotIn('category', schema['properties'])
             response = client.post('/mcp', headers=HEADERS, json=call({'query': ' test ', 'limit': 3}))
             result = response.json()['result']['structuredContent']
             self.assertEqual(result['results'], RESULT['results'])

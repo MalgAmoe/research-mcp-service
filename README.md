@@ -75,7 +75,6 @@ Search parameters:
 | `query` | 1–2,000 characters |
 | `limit` | 1–50; default 5 |
 | `freshness` | `any`, `day`, `week`, `month`, `year` |
-| `category` | `general` or `news` |
 | `page` | 1–10 |
 | `language` | Optional language tag, e.g. `en` or `fr-FR` |
 | `include_domains`, `exclude_domains` | Up to 10 plain domains each; normalized and validated |
@@ -88,7 +87,7 @@ Normal responses show the query, results with sources and returned count. Succes
 
 Set `diagnostics=true` to include a nested `diagnostics` object with provider/status, engine failures and ordered `attempts` history—including a failed primary when fallback succeeds. Per-result engine metadata is also included in this mode. Internal `degraded` status describes partial engine availability, not result quality. DDGS engine provenance is unavailable, so its `engines` arrays are empty rather than claiming configured backends all produced each result.
 
-Freshness, news categories, pagination and language depend on upstream support. In particular, DDGS uses the configured region (`DDGS_REGION`, default `us-en`); the language parameter is not independently enforced there. Results can be fewer than requested after filtering or upstream limits. There is no relevance reranker or claim of guaranteed search accuracy.
+This is general web search; a news-search mode is deliberately not supported. Freshness, pagination and language depend on upstream support. Pages can overlap or change between calls; there is no cross-page/session deduplication guarantee. Publication dates are returned only when supplied as parseable upstream metadata; dates mentioned in snippets are not assumed to be publication dates. In particular, DDGS uses the configured region (`DDGS_REGION`, default `us-en`); the language parameter is not independently enforced there. Results can be fewer than requested after filtering or upstream limits. There is no relevance reranker or claim of guaranteed search accuracy.
 
 Typical snippets are retained; exceptional titles/snippets are capped at 500/4,000 characters, and the response is bounded to about 500 KB. The returned count and a plain-language note make limits visible by default; diagnostic mode also exposes `truncation` and `requested_limit`. Unsupported or oversized URLs are omitted, never silently shortened into broken links. Returned text is untrusted; queries are sent to external engines, so do not submit secrets. Search does not fetch result pages or save them to storage.
 

@@ -11,6 +11,10 @@ from research_mcp_service.search import SearchOptions, search_backend
 
 
 class FilterTests(unittest.TestCase):
+    def test_news_is_not_supported(self):
+        with self.assertRaises(ValueError):
+            SearchOptions(query='test', category='news')
+
     def test_normalized_domain_alternatives_and_subdomains(self):
         req = SearchOptions(query='test', include_domains=[' Example.COM. ', 'python.org'],
                             exclude_domains=['private.example.com'])
