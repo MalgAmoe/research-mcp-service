@@ -37,7 +37,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
              patch('research_mcp_service.worker_client.get_worker', return_value=backend), \
              patch.object(services, '_convert_document_content', new=AsyncMock()) as convert:
             result = await prepare_document(ConvertDocumentRequest(url='https://example.org/report.pdf'))
-            self.assertEqual(result, (b'original', 'application/pdf', '.pdf', '## Page 1\nContent'))
+            self.assertEqual(result, (b'original', 'application/pdf', '.pdf', '## Page 1\nContent', {}))
             convert.assert_not_awaited()
             with self.assertRaises(GatewayError):
                 await prepare_document(ConvertDocumentRequest(url='https://example.org/report.pdf', strategy='structured'))

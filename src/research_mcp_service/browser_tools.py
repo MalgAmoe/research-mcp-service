@@ -118,6 +118,33 @@ def register_browser_tools(server, backend, *, timeout=45):
         """Wait up to ten seconds in an existing session, then observe its current state."""
         return await run('wait', session_id=session_id, ms=ms, include_screenshot=include_screenshot)
 
+    @server.tool(annotations=FETCH)
+    async def browser_wait_for(session_id: Session,
+                               text: Annotated[str | None, Field(min_length=1, max_length=2000)] = None,
+                               selector: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
+                               timeout_ms: Annotated[int, Field(ge=1, le=10000)] = 5000) -> CallToolResult:
+        """Wait for literal case-sensitive body text OR the first CSS-matched element to be visible.
+
+        Returns matched/timed_out and an observation, not a claim that the entire page is ready.
+        Text can already be present; this does not establish that new search results have arrived.
+        """
+        if (text is None) == (selector is None) or not (text or selector or '').strip():
+            raise ToolError('Specify exactly one nonempty text or CSS selector.')
+        return await run('wait_for', session_id=session_id, text=text, selector=selector, timeout_ms=timeout_ms)
+
+    @server.tool(annotations=INTERACT)
+    async def browser_back(session_id: Session) -> CallToolResult:
+        """Go back using browser history, then observe. Navigation may revisit stateful pages.
+
+        A null browser response cannot distinguish same-document navigation from no history entry.
+        """
+        return await run('history', session_id=session_id, direction='back')
+
+    @server.tool(annotations=INTERACT)
+    async def browser_forward(session_id: Session) -> CallToolResult:
+        """Go forward using browser history; report the resulting URL and navigation outcome."""
+        return await run('history', session_id=session_id, direction='forward')
+
     @server.tool(annotations=LOCAL_READ)
     async def browser_text(session_id: Session, max_chars: Annotated[int, Field(ge=1, le=100000)] = 50000) -> CallToolResult:
         """Get page text beyond the compact observation, with explicit truncation information."""

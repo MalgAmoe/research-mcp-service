@@ -27,6 +27,9 @@ class BrowserToolTests(unittest.TestCase):
             ('browser_press', {'session_id': SESSION, 'key': 'Enter'}, 'press'),
             ('browser_scroll', {'session_id': SESSION, 'direction': 'down'}, 'scroll'),
             ('browser_wait', {'session_id': SESSION}, 'wait'),
+            ('browser_wait_for', {'session_id': SESSION, 'text': 'Results'}, 'wait_for'),
+            ('browser_back', {'session_id': SESSION}, 'history'),
+            ('browser_forward', {'session_id': SESSION}, 'history'),
             ('browser_text', {'session_id': SESSION}, 'text'),
             ('browser_find', {'session_id': SESSION, 'query': 'needle'}, 'find'),
             ('browser_close', {'session_id': SESSION}, 'close'),
@@ -97,6 +100,6 @@ class BrowserToolTests(unittest.TestCase):
         with TestClient(create_app(TOKEN, search_backend=AsyncMock(), gateway_backend=AsyncMock(),
                                   browser_backend=AsyncMock()), base_url='http://127.0.0.1:8766') as client:
             tools = client.post('/mcp', headers=HEADERS, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']
-            self.assertEqual(len(tools), 31)
-            self.assertEqual(len({t['name'] for t in tools}), 31)
+            self.assertEqual(len(tools), 34)
+            self.assertEqual(len({t['name'] for t in tools}), 34)
             self.assertIn('search', {t['name'] for t in tools})

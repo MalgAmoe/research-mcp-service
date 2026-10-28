@@ -16,7 +16,8 @@ async def prepare_document(req):
         data = await get_worker(settings.worker_socket).run('convert', req.model_dump(mode='json'))
         if data['suffix'] not in {'.pdf', '.txt', '.md', '.html', '.htm', '.docx', '.pptx'}:
             raise GatewayError('invalid_worker_result', 'Worker returned an unsupported document type', status_code=502)
-        return base64.b64decode(data['original_base64'], validate=True), data['content_type'], data['suffix'], data['markdown']
+        return (base64.b64decode(data['original_base64'], validate=True), data['content_type'],
+                data['suffix'], data['markdown'], data.get('conversion_metadata', {}))
 
     # Retained standalone-library path; the hosted gateway must configure WORKER_SOCKET.
     from .services import _suffix_for_document, _convert_document_content
@@ -36,4 +37,5 @@ async def prepare_document(req):
         markdown = await _convert_document_content(response.content, suffix)
     except Exception:
         raise GatewayError('document_conversion_failed', 'Could not convert document', status_code=502) from None
-    return response.content, content_type, suffix, markdown
+    from .pdf_links import link_metadata
+    return response.content, content_type, suffix, markdown, link_metadata(response.content, suffix)

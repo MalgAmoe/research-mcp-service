@@ -36,7 +36,9 @@ async def execute(job):
             raise GatewayError('document_conversion_failed', 'Document conversion failed', status_code=502) from None
         if not markdown.strip():
             raise GatewayError('no_document_text', 'No document text was extracted; OCR is not enabled', status_code=502)
-        return dict(original_base64=base64.b64encode(response.content).decode('ascii'),
+        from research_gateway.pdf_links import link_metadata
+        return dict(conversion_metadata=link_metadata(response.content, suffix),
+                    original_base64=base64.b64encode(response.content).decode('ascii'),
                     content_type=content_type, suffix=suffix, markdown=markdown,
                     final_url=str(response.url))
     if action == 'feed':

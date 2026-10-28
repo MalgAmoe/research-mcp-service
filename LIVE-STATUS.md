@@ -1,5 +1,15 @@
 # Private development deployment
 
+## Prepared navigation/link release — not deployed
+
+The next source release includes the clarity changes below plus three additional MCP tools (34 after deployment, 31 currently live):
+
+- `browser_wait_for`: literal case-sensitive body text or first CSS-matched visible element, 1–10,000 ms deadline. Reports matched/timed_out with an observation. Existing text can match immediately; it does not prove new results arrived or global page readiness.
+- `browser_back` / `browser_forward`: browser history APIs, resulting URL, URL-change flag and navigation outcome. Null browser responses are honestly labelled same_document_or_no_entry; same-document history can also return null. Navigation timeout is distinct from that case.
+- Newly converted PDFs include `metadata.extra.pdf_links`: bounded URI annotation destinations and direct internal destination page numbers. Maximum 200 entries and 2,048 URI bytes. Other actions/oversized destinations are counted as omitted; partial/limited/failed states are explicit. No destinations are fetched, and printed/image-based links are not inferred. Annotation failure retains converted text. Existing cached documents are not retroactively rewritten; reconversion is needed to populate this metadata.
+
+112 offline tests pass, including a real generated PDF with URI/internal annotations, MCP dispatch, conditional timeout and null-history handling. Real browser/new-image verification is still required at deployment. No live services have been restarted for either prepared release.
+
 ## Prepared clarity release — not deployed
 
 Source changes passed 108 offline tests; live processes/images have not been restarted:

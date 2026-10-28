@@ -348,6 +348,52 @@ async def scroll_session(params: dict[str, Any]) -> dict[str, Any]:
     return await observe_session({"session_id": session.session_id, "include_screenshot": params.get("include_screenshot", False)})
 
 
+async def history_session(params: dict[str, Any]) -> dict[str, Any]:
+    from playwright.async_api import TimeoutError as BrowserTimeout
+    session = _get_session(params['session_id'])
+    page = session.page
+    before = page.url
+    if params.get('direction') not in {'back', 'forward'}:
+        raise ValueError('History direction must be back or forward')
+    move = page.go_back if params['direction'] == 'back' else page.go_forward
+    outcome = 'completed'
+    try:
+        response = await move(wait_until='domcontentloaded', timeout=15000)
+        if response is not None:
+            session.main_status = response.status
+        else:
+            outcome = 'same_document_or_no_entry'
+    except BrowserTimeout:
+        outcome = 'timed_out'
+    result = await observe_session(params)
+    result['history'] = {'direction': params['direction'], 'outcome': outcome,
+                         'previous_url': before, 'resulting_url': page.url,
+                         'url_changed': before != page.url}
+    return result
+
+
+async def wait_for_session(params: dict[str, Any]) -> dict[str, Any]:
+    from playwright.async_api import TimeoutError as BrowserTimeout
+    session = _get_session(params['session_id'])
+    text, selector = params.get('text'), params.get('selector')
+    if (text is None) == (selector is None):
+        raise ValueError('Specify text or selector')
+    timeout = max(1, min(10000, int(params.get('timeout_ms', 5000))))
+    outcome = 'matched'
+    try:
+        if text is not None:
+            await session.page.wait_for_function(
+                '(text) => (document.body?.innerText || "").includes(text)', arg=text, timeout=timeout)
+        else:
+            await session.page.locator('css=' + selector).first.wait_for(state='visible', timeout=timeout)
+    except BrowserTimeout:
+        outcome = 'timed_out'
+    result = await observe_session(params)
+    result['wait_condition'] = {'kind': 'text' if text is not None else 'css_selector',
+                                'outcome': outcome, 'timeout_ms': timeout}
+    return result
+
+
 async def wait_session(params: dict[str, Any]) -> dict[str, Any]:
     session = _get_session(params["session_id"])
     await session.page.wait_for_timeout(int(params.get("ms", 1000)))
@@ -467,6 +513,8 @@ ACTIONS = {
     "press": press_session,
     "scroll": scroll_session,
     "wait": wait_session,
+    "wait_for": wait_for_session,
+    "history": history_session,
     "text": text_session,
     "find": find_session,
     "close": close_session,

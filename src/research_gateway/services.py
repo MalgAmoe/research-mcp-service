@@ -1045,7 +1045,7 @@ async def batch_fetch(req: BatchFetchRequest) -> BatchFetchResponse:
 async def convert_document(req: ConvertDocumentRequest) -> ConvertedDocument:
     from .document_io import prepare_document
     url = str(req.url)
-    data, content_type, suffix, markdown = await prepare_document(req)
+    data, content_type, suffix, markdown, conversion_metadata = await prepare_document(req)
     doc_id = _doc_id(url, data[:2048].hex())
 
     try:
@@ -1075,7 +1075,8 @@ async def convert_document(req: ConvertDocumentRequest) -> ConvertedDocument:
         domain=_domain(url),
         content_hash=_content_hash(markdown),
         word_count=_word_count(markdown),
-        extra={"content_type": content_type, "source_suffix": suffix, "strategy": req.strategy.value},
+        extra={"content_type": content_type, "source_suffix": suffix, "strategy": req.strategy.value,
+               **conversion_metadata},
     )
     artifacts = Artifacts(raw_html=original_uri, markdown=markdown_uri)
     method = _document_method_for_suffix(suffix)
