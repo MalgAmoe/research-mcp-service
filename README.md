@@ -20,6 +20,8 @@ The base Compose file starts storage only. The old all-in-one gateway/engine pro
 
 ## Tools and behavior
 
+Usual workflow: **search → fetch selected sources → retrieve saved passages**; use interactive browsing when needed. Successful calls do not certify extraction completeness or fidelity. `web_capabilities` collects operational contracts, limits and recovery guidance.
+
 - Search: explicit SearXNG/DDGS provider, automatic fallback, domains, page, freshness and language; optional diagnostics. Upstream pagination may overlap; language/freshness are not guarantees and missing publication dates are not inferred from snippets.
 - Reading: `light` HTTP/Trafilatura; `standard` Chromium/structured Markdown; `browser` Chromium or Camoufox; `auto` fallback. Stealth requires `strategy=browser` and `browser_profile=stealth`; it does not guarantee access past blocking.
 - Documents: PDF, DOCX, PPTX, TXT, Markdown and HTML text conversion; saved originals and extracted text. Text extraction is not complete document/layout understanding.
@@ -29,6 +31,8 @@ The base Compose file starts storage only. The old all-in-one gateway/engine pro
 - Browser: open/observe/navigate/click/type/press/scroll/wait/text/find/close/list, bounded text/element waits, explicit back/forward, and native image screenshots with observation-preserving failure warnings. Four ephemeral sessions per owner worker; failures/restarts can expire them.
 
 Live MCP uses one text representation, not duplicate text/structured JSON. Documents default to 12,000-character passages, at most 30,000 per retrieval. Backend JSON is limited to 2 MiB; passage lookup currently retrieves the whole cached document before slicing, so this ceiling still applies. Inline artifacts are limited to 256 KiB; screenshots to 1 MiB. Batches accept 15 URLs and a concurrency argument of 1–10; actual isolated fetch execution has two slots. These are limits, not throughput promises.
+
+Fresh page acquisitions and conversions create new snapshot IDs, including unchanged content; cache hits reuse existing IDs. Prior snapshots remain readable until explicit retention. URL lookup selects the last saved document and page cache reuse depends on strategy/profile. This increases storage use on repeated refreshes; automatic retention remains disabled. Older prefix-derived IDs stay readable, but previously overwritten versions cannot be recovered by this change.
 
 ## Development and operations
 

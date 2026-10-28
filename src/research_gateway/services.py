@@ -44,9 +44,10 @@ def _domain(url: str) -> str | None:
     return parsed.hostname or None
 
 
-def _doc_id(url: str, content: str = "") -> str:
-    h = hashlib.sha256((url + "\n" + content[:2048]).encode()).hexdigest()[:16]
-    return f"doc_{h}"
+def _doc_id() -> str:
+    """A fresh acquisition is a separate snapshot, even for identical content."""
+    from uuid import uuid4
+    return f"doc_{uuid4().hex}"
 
 
 def _content_hash(content: str) -> str:
@@ -325,8 +326,7 @@ async def read_url(req: ReadUrlRequest) -> Document:
     title, markdown, method, strategy_used, attempts, raw_html = await _read_with_strategy(req)
     word_count = _word_count(markdown)
 
-    profile_part = req.browser_profile.value if strategy_used == ReadStrategy.browser else ""
-    doc_id = _doc_id(f"{url}:{strategy_used}:{profile_part}", markdown)
+    doc_id = _doc_id()
     now = datetime.now(timezone.utc)
 
     try:
@@ -786,7 +786,7 @@ async def convert_document(req: ConvertDocumentRequest) -> ConvertedDocument:
     from .document_io import prepare_document
     url = str(req.url)
     data, content_type, suffix, markdown, conversion_metadata = await prepare_document(req)
-    doc_id = _doc_id(url, data[:2048].hex())
+    doc_id = _doc_id()
 
     try:
         original_uri = artifact_store.put_bytes(
