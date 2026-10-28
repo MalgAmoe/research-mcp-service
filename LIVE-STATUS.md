@@ -1,5 +1,11 @@
 # Private development deployment
 
+## Prepared retention integration — no deletion or scheduling enabled
+
+scripts/retention.py runs the existing retention engine inside a temporary control-image process against this project's storage. It supports development and fresh-server Compose layouts and strips shell project/config overrides. Dry run remains the default; pin operations are explicit. Apply requires an updated control image plus --writers-stopped, refuses absent/non-exited control, and rechecks stopped state after acquiring the maintenance lock. Apply failure after deletion begins retains the lock for explicit recovery; successful completion releases it. No automatic service stopping/restarting or unlocking is added.
+
+119 offline tests pass, including current-state refusal, one-off-container handling, both layouts, locked handshake refusal/success and failure-lock retention. A live read-only control check correctly refused the running service. The host launcher successfully ran the unchanged inventory code in the existing image: 55 documents, 5 RSS entries, 110 objects / 17,471,745 artifact bytes and 1,816,088 Redis used-memory bytes; zero deletion candidates at 30/90 days. Logs: .state/retention-dry-run.log and .state/tests-retention-host.log. No data was deleted, pin changed or service restarted. The new apply protocol is not deployed or exercised against real data.
+
 ## Prepared fresh-server workflow — existing deployment unchanged
 
 INSTALL.md and scripts/setup_server.py provide fresh configuration, instance-scoped image builds/startup, foreground MCP execution, status and optional user-systemd unit generation. Initialization refuses existing configuration; there is no automatic install/enable, migration, cleanup or credential rotation. compose.server.yml uses a private host Unix socket for control, retaining internal storage and network-none execution. The old TCP path remains supported for the current deployment.

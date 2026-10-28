@@ -56,7 +56,7 @@ uv run --locked --env-file .env.mcp python -m research_mcp_service.server
 
 Clients use the configured Tailnet URL and `Authorization: Bearer <token>` in protected client settings. No OAuth/public deployment yet. Reconnect clients after schema changes. `health` checks MCP connectivity, not backend health. The MCP process is manually managed with `.state/mcp.pid` / `.state/mcp.log`, not installed as a boot service.
 
-Preserve `.env*`, `.secrets/`, `.state/` evidence and Docker data volumes. Never print secrets or use `docker compose down -v` as cleanup. Retention code is retained for deliberate administrator maintenance; no automatic retention is enabled. Do not restart workers while users are testing without coordinating the interruption.
+Preserve `.env*`, `.secrets/`, `.state/` evidence and Docker data volumes. Never print secrets or use `docker compose down -v` as cleanup. Manual cache retention is available through `python3 scripts/retention.py` (read-only dry run by default); see INSTALL.md for pinning, stopped-writer checks and failure recovery. No automatic retention is enabled. Do not restart workers while users are testing without coordinating the interruption.
 
 ## License
 

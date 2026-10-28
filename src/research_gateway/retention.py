@@ -1,14 +1,13 @@
 """Explicit cache retention. Dry-run by default; apply only with all writers stopped.
 
-Run via: uv run --env-file .env python -m research_gateway.retention
+Run through scripts/retention.py on the Docker host; storage access stays inside control's network.
 """
 from __future__ import annotations
 
 import argparse
 from datetime import datetime, timedelta, timezone
 import json
-import subprocess
-from pathlib import Path
+import sys
 
 from redis import Redis
 from pydantic import BaseModel, Field
@@ -124,13 +123,35 @@ def apply_plan(redis, artifacts, plan):
     redis.delete('seen_urls', 'seen_content_hashes')
 
 
-def require_stopped_gateway():
-    root = Path(__file__).resolve().parents[2]
-    running = subprocess.check_output(
-        ['docker', 'compose', 'ps', '--services', '--status', 'running'], cwd=root, text=True,
-    ).split()
-    if 'gateway' in running:
-        raise RuntimeError('Stop the gateway first: docker compose stop gateway')
+HOST_CHECK = 'RETENTION_WRITER_CHECK_V1'
+
+
+def confirm_host_writers():
+    # The host launcher checks Docker AFTER this process holds the Redis lock.
+    # A restarted control is then blocked from admitting new requests.
+    print(HOST_CHECK, flush=True)
+    if sys.stdin.readline().strip() != 'WRITERS_STOPPED':
+        raise RuntimeError('Host did not confirm stopped writers; nothing deleted')
+
+
+def guarded_apply(redis, artifacts, days, rss_days, confirm=confirm_host_writers):
+    lock = redis.lock(LOCK_KEY, timeout=None, blocking_timeout=0)
+    if not lock.acquire():
+        raise RuntimeError('Maintenance lock is already held; inspect the active/stale maintenance operation')
+    release = True
+    try:
+        confirm()
+        plan = inventory(redis, artifacts, days, rss_days)
+        print(json.dumps({'mode': 'apply', **plan['summary']}, indent=2), flush=True)
+        release = False
+        apply_plan(redis, artifacts, plan)
+        release = True
+    finally:
+        if release:
+            lock.release()
+        else:
+            print('Cleanup failed after deletion began. Maintenance lock retained; keep writers stopped and inspect recovery before clearing it.', file=sys.stderr)
+    print('Cleanup complete. Restart MCP/control when ready.')
 
 
 def main():
@@ -139,6 +160,7 @@ def main():
     parser.add_argument('--rss-days', type=int, default=90)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--writers-stopped', action='store_true', help='Confirm ALL other host/remote fetch writers are stopped')
+    parser.add_argument('--host-guard-protocol', type=int, choices=[1], help=argparse.SUPPRESS)
     pins = parser.add_mutually_exclusive_group()
     pins.add_argument('--pin', metavar='DOC_ID')
     pins.add_argument('--unpin', metavar='DOC_ID')
@@ -148,6 +170,8 @@ def main():
         parser.error('retention must be at least one day')
     if args.apply and (args.pin or args.unpin or args.list_pins):
         parser.error('--apply cannot be combined with pin operations')
+    if args.apply and (not args.writers_stopped or args.host_guard_protocol != 1):
+        parser.error('Apply requires scripts/retention.py --apply --writers-stopped on the Docker host')
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     artifacts = ArtifactStore()
     if args.list_pins:
@@ -166,16 +190,7 @@ def main():
     if not args.apply:
         plan = inventory(redis, artifacts, args.days, args.rss_days)
         print(json.dumps({'mode': 'dry-run', **plan['summary']}, indent=2)); return
-    if not args.writers_stopped:
-        parser.error('--apply requires --writers-stopped confirmation')
-    require_stopped_gateway()
-    # No expiry: a slow deletion cannot silently outlive its protection. If this
-    # process is killed, inspect it before manually releasing the stale lock.
-    with redis.lock(LOCK_KEY, timeout=None, blocking_timeout=0):
-        plan = inventory(redis, artifacts, args.days, args.rss_days)
-        print(json.dumps({'mode': 'apply', **plan['summary']}, indent=2), flush=True)
-        apply_plan(redis, artifacts, plan)
-        print('Cleanup complete. Restart the gateway when ready.')
+    guarded_apply(redis, artifacts, args.days, args.rss_days)
 
 
 if __name__ == '__main__':
