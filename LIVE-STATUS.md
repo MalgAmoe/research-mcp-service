@@ -1,14 +1,20 @@
 # Private development deployment
 
-## Source cleanup after deployment — not yet deployed
+## Deployed cleanup release fd40a6b
 
 Removed obsolete standalone safe-reader/DNS code and direct search/research HTTP routes, their request/response models, the unused render_js option and queued-job status scaffold. Batch responses still report status=done. Removed the direct-HTTP document-conversion fallback and the unimplemented structured strategy placeholder. Production extraction and egress remain intact.
 
 Removed test_contract.py (six tests, covering obsolete route/DNS contracts plus redundant model defaults/validation). Removed the noncompact create_app mode; protocol tests now assert one text representation and no structuredContent. Replaced the legacy research forwarding case with search → unique-URL batch-fetch checks, including empty/error results and missing-search rejection. Retained active security, retention/persistence, extraction and user-feedback regressions. The revised 108-test suite passes offline.
 
-No live services restarted for this cleanup; the deployed code and snapshots remain those below. No evidence, credentials or volumes were deleted.
+Control/worker source layers and the host MCP process have been updated. Dependency manifest/lock hashes were checked against both prior images before reusing their dependency layers. Rollback image tags end in pre-fd40a6b. No evidence, credentials or volumes were deleted.
 
-## Deployed release 5018cf5
+Live checks passed: 34 tools, single text representation, search → acquired Python documentation, obsolete-route rejection, heading index, artifact/preview metadata, browser history and condition waits, screenshot-limit observation preservation, unsupported-format errors and 58 NASA PDF annotation links. The first browser-open probe returned browser_reset; no browser processes remained. A separate retry passed the full browser/conversion probe without another service restart. The original failure is preserved in .state/check-fd40a6b.log; its cause is not established.
+
+Deployment/check logs: .state/deploy-fd40a6b.log, .state/check-cleanup-fd40a6b.log, .state/check-fd40a6b-retry.log. Current source snapshots:
+- MCP/worker: sha256:a608d7400499422cbee602aa1be7fa26cb3fc1f89585e44c721ac5abd3da2d40
+- Control: sha256:7368f3b1b08a74ad25fef69cdcb14179925d1155948aacc4700ae9cbff15784e
+
+## Previous deployment 5018cf5
 
 Both clarity and navigation/link changes are live. The endpoint advertises 34 tools. Live MCP checks passed: heading index, artifact booleans, preview metadata, back/forward URLs, text/element matching, unmatched-condition timeout retaining observation, oversized screenshot fallback, unsupported-format errors, and the NASA project guide PDF (58 URI/internal link annotations). All 112 offline tests pass. Probe browser session was closed. No storage or feed data was purged.
 
