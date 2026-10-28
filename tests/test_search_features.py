@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 from research_gateway.errors import GatewayError
 from research_gateway.models import SearchResult, SearchWebRequest, SearchWebResponse
-from research_gateway.services import search_web, _build_search_query, _search_domain_allowed
+from research_gateway.services import search_web, _search_ddgs, _build_search_query, _search_domain_allowed
 from research_mcp_service.search import SearchOptions, search_backend
 
 
@@ -32,6 +32,17 @@ class FilterTests(unittest.TestCase):
 
 
 class RoutingEvidenceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ddgs_receives_the_requested_page(self):
+        settings = SimpleNamespace(ddgs_backend='duckduckgo,yahoo', ddgs_region='us-en')
+        with patch('research_gateway.services.settings', settings), \
+             patch('research_gateway.services.DDGS') as factory:
+            factory.return_value.text.return_value = [
+                {'title': 'Example', 'href': 'https://example.org/', 'body': 'Example result'}]
+            for page in [1, 2, 10]:
+                await _search_ddgs(SearchWebRequest(query='test', page=page, limit=4))
+                self.assertEqual(factory.return_value.text.call_args.kwargs['page'], page)
+                self.assertEqual(factory.return_value.text.call_args.kwargs['backend'], 'duckduckgo,yahoo')
+
     async def test_fallback_keeps_primary_error(self):
         response = SearchWebResponse(query='test', provider='ddgs', results=[
             SearchResult(title='test', url='https://example.com/', rank=1)])
