@@ -19,7 +19,7 @@ MCP adapter + identity-to-environment routing
         +-- person B: research engine + Redis + MinIO + SearXNG + browser worker
 ```
 
-Use Streamable HTTP for MCP. The initial connectivity prototype uses the official Python SDK `mcp==2.3.0`, checked against its installed API and official SDK documentation. It exposes only `health`, requires a pre-shared bearer token on every HTTP request and binds only to loopback or a Tailscale IPv4 address. This is a single-user test, not the production multi-user authentication design.
+Use Streamable HTTP for MCP. The initial connectivity prototype uses the official Python SDK `mcp==2.3.0`, checked against its installed API and official SDK documentation. It exposes `health` and opt-in `search`, requires a pre-shared bearer token on every HTTP request and binds only to loopback or a Tailscale IPv4 address. Search uses this project's dedicated SearXNG container, has a two-call concurrency limit and 25-second deadline, and does not fetch result pages or access storage. This is a single-user test, not the production multi-user authentication design.
 
 References: https://github.com/modelcontextprotocol/python-sdk and https://py.sdk.modelcontextprotocol.io/get-started/ .
 
@@ -79,4 +79,4 @@ Add per-person storage accounting and a defined quota-exceeded response. Pins an
 
 ## Not yet implemented
 
-Research-tool MCP adapter, multi-user authentication and provisioning/routing, remotely owned browser sessions, enforced egress, aggregate user quotas, hosted maintenance, production deployment. The current Compose file remains only a private backend skeleton. The separate single-user MCP entry point has bearer authentication and basic HTTP limits, but does not connect to those backends.
+Page-reading/document/browser MCP tools, multi-user authentication and provisioning/routing, remotely owned browser sessions, enforced egress, aggregate user quotas, hosted maintenance, production deployment. The full Compose file remains a private backend skeleton. The single-user MCP entry point connects only to the separately provisioned search-only stack in compose.search.yml, not the full backend or personal tool deployment.
