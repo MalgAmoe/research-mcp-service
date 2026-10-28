@@ -80,14 +80,17 @@ Search parameters:
 | `language` | Optional language tag, e.g. `en` or `fr-FR` |
 | `include_domains`, `exclude_domains` | Up to 10 plain domains each; normalized and validated |
 | `provider` | `auto` (default), `searxng`, or `ddgs` |
+| `diagnostics` | `false` (default); set `true` for troubleshooting |
 
 Domain filters match the specified host and its subdomains, not similarly named domains. Multiple included domains are OR alternatives; exclusions take precedence. Filtering is also enforced on returned results. Unlike the original copied implementation, this avoids requiring a result to satisfy several independent `site:` restrictions.
 
-Responses retain provider/status, per-result source/engine metadata where available, and an ordered `attempts` history—including a failed primary when fallback succeeds. A `degraded` status with usable results is not a total search failure. DDGS does not provide verified per-result engine provenance, so its `engines` arrays are empty rather than claiming its configured backends all produced each result.
+Normal responses show the query, results with sources and returned count. Successful searches are not labelled `degraded`. A short note identifies fallback use, and empty/failed searches have distinct plain-language messages. Material limitations (such as language not being enforced or output being shortened) remain visible.
+
+Set `diagnostics=true` to include a nested `diagnostics` object with provider/status, engine failures and ordered `attempts` history—including a failed primary when fallback succeeds. Per-result engine metadata is also included in this mode. Internal `degraded` status describes partial engine availability, not result quality. DDGS engine provenance is unavailable, so its `engines` arrays are empty rather than claiming configured backends all produced each result.
 
 Freshness, news categories, pagination and language depend on upstream support. In particular, DDGS uses the configured region (`DDGS_REGION`, default `us-en`); the language parameter is not independently enforced there. Results can be fewer than requested after filtering or upstream limits. There is no relevance reranker or claim of guaranteed search accuracy.
 
-Typical snippets are retained; exceptional titles/snippets are capped at 500/4,000 characters, and the response is bounded to about 500 KB. `truncation`, `requested_limit` and `returned_count` make limits visible. Unsupported or oversized URLs are omitted, never silently shortened into broken links. Returned text is untrusted; queries are sent to external engines, so do not submit secrets. Search does not fetch result pages or save them to storage.
+Typical snippets are retained; exceptional titles/snippets are capped at 500/4,000 characters, and the response is bounded to about 500 KB. The returned count and a plain-language note make limits visible by default; diagnostic mode also exposes `truncation` and `requested_limit`. Unsupported or oversized URLs are omitted, never silently shortened into broken links. Returned text is untrusted; queries are sent to external engines, so do not submit secrets. Search does not fetch result pages or save them to storage.
 
 At most two searches execute concurrently in this single MCP process; additional calls receive a retryable busy tool error rather than queueing indefinitely. Each call has a 60-second overall deadline including startup, primary and fallback. Provider calls run in a short-lived process; timeouts and cancellations kill/reap it before releasing capacity, including DDGS's blocking thread workers. This uses Linux process groups and adds small per-call startup overhead. Provider errors are reported without internal URLs or exception details. Restart/reconnect or refresh tools in the client after enabling search. This does not rotate the MCP token or change its URL.
 

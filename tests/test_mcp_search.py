@@ -21,16 +21,26 @@ def call(arguments=None):
 
 
 class SearchToolTests(unittest.TestCase):
-    def test_schema_and_success_preserve_diagnostics(self):
+    def test_schema_and_success_hide_routine_diagnostics(self):
         backend = AsyncMock(return_value=RESULT)
         with TestClient(create_app(TOKEN, search_backend=backend), base_url='http://127.0.0.1:8766') as client:
             response = client.post('/mcp', headers=HEADERS, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
             tools = response.json()['result']['tools']
             self.assertEqual({t['name'] for t in tools}, {'health', 'search'})
             response = client.post('/mcp', headers=HEADERS, json=call({'query': ' test ', 'limit': 3}))
-            self.assertEqual(response.json()['result']['structuredContent'], RESULT)
+            result = response.json()['result']['structuredContent']
+            self.assertEqual(result['results'], RESULT['results'])
+            self.assertNotIn('status', result)
+            self.assertNotIn('diagnostics', result)
         backend.assert_awaited_once_with('test', 3, 'any', category='general', page=1,
             language=None, include_domains=[], exclude_domains=[], provider='auto')
+
+    def test_explicit_diagnostics_are_available_through_mcp(self):
+        with TestClient(create_app(TOKEN, search_backend=AsyncMock(return_value=RESULT)), base_url='http://127.0.0.1:8766') as client:
+            response = client.post('/mcp', headers=HEADERS, json=call({'query': 'test', 'diagnostics': True}))
+            result = response.json()['result']['structuredContent']
+            self.assertEqual(result['diagnostics']['status'], 'degraded')
+            self.assertEqual(result['diagnostics']['engine_failures'], RESULT['engine_failures'])
 
     def test_invalid_input_never_reaches_backend(self):
         backend = AsyncMock(return_value=RESULT)
