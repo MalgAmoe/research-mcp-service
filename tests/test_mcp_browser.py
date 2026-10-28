@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 from starlette.testclient import TestClient
 
 from research_mcp_service.server import create_app
+from mcp_helpers import tool_data
 
 TOKEN = 'offline-test-token-not-for-deployment-123456'
 HEADERS = {'Authorization': 'Bearer ' + TOKEN, 'Accept': 'application/json, text/event-stream'}
@@ -44,7 +45,7 @@ class BrowserToolTests(unittest.TestCase):
                     backend.reset_mock()
                     response = client.post('/mcp', headers=HEADERS, json=rpc(name, args)).json()['result']
                     self.assertFalse(response.get('isError'), response)
-                    self.assertEqual(response['structuredContent']['session_id'], SESSION)
+                    self.assertEqual(tool_data(response)['session_id'], SESSION)
                     backend.assert_awaited_once()
                     called_action, params = backend.call_args.args
                     self.assertEqual(called_action, action)
@@ -64,8 +65,8 @@ class BrowserToolTests(unittest.TestCase):
             result = client.post('/mcp', headers=HEADERS, json=rpc('browser_observe',
                 {'session_id': SESSION, 'include_screenshot': True, 'include_text': False})).json()['result']
             self.assertFalse(result.get('isError'), result)
-            self.assertNotIn('visible_text', result['structuredContent'])
-            self.assertNotIn('screenshot_base64', result['structuredContent'])
+            self.assertNotIn('visible_text', tool_data(result))
+            self.assertNotIn('screenshot_base64', tool_data(result))
             self.assertNotIn('private page text', result['content'][0]['text'])
             self.assertEqual(result['content'][1]['type'], 'image')
             self.assertEqual(result['content'][1]['data'], PNG)

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import ipaddress
 import re
-import socket
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -26,13 +24,9 @@ from .models import (
     Document,
     DocumentMetadata,
     ExtractionAttempt,
-    PublicReadRequest,
-    PublicReadResponse,
     ReadStrategy,
     ReadUrlRequest,
-    ResearchRequest,
     ResearchFailure,
-    ResearchResponse,
     ResearchSource,
     ResourceType,
     RssFeed,
@@ -295,209 +289,6 @@ def _build_search_query(req: SearchWebRequest) -> str:
     for domain in req.exclude_domains:
         query += f' -site:{domain}'
     return query
-
-
-_PUBLIC_READ_MAX_BYTES = 2 * 1024 * 1024
-_PUBLIC_READ_MAX_REDIRECTS = 5
-_PUBLIC_READ_CONTENT_TYPES = (
-    "text/html",
-    "application/xhtml+xml",
-    "text/plain",
-)
-
-
-def _is_public_address(value: str) -> bool:
-    try:
-        return ipaddress.ip_address(value).is_global
-    except ValueError:
-        return False
-
-
-async def _resolve_public_host(host: str, port: int) -> str:
-    """Resolve a hostname and return a pinned public address.
-
-    Every returned address must be globally routable. Rejecting mixed public and
-    private answers prevents an attacker from influencing address selection.
-    """
-    try:
-        infos = await asyncio.get_running_loop().getaddrinfo(
-            host,
-            port,
-            type=socket.SOCK_STREAM,
-        )
-    except socket.gaierror as exc:
-        raise GatewayError(
-            "public_read_dns_failed",
-            "Could not resolve the result host",
-            status_code=502,
-            host=host,
-            cause=str(exc),
-        ) from exc
-
-    addresses = list(dict.fromkeys(info[4][0] for info in infos))
-    if not addresses or any(not _is_public_address(address) for address in addresses):
-        raise GatewayError(
-            "public_read_destination_denied",
-            "Result host does not resolve exclusively to public addresses",
-            status_code=403,
-            host=host,
-        )
-    addresses.sort(key=lambda address: ipaddress.ip_address(address).version)
-    return addresses[0]
-
-
-async def _safe_public_fetch(start_url: str) -> tuple[str, bytes, str | None]:
-    current = start_url
-    for redirect_count in range(_PUBLIC_READ_MAX_REDIRECTS + 1):
-        parsed = httpx.URL(current)
-        scheme = parsed.scheme.decode() if isinstance(parsed.scheme, bytes) else parsed.scheme
-        host = parsed.host.decode() if isinstance(parsed.host, bytes) else parsed.host
-        if scheme not in {"http", "https"} or not host:
-            raise GatewayError(
-                "public_read_destination_denied",
-                "Only public HTTP and HTTPS result pages are allowed",
-                status_code=403,
-                url=current,
-            )
-        if parsed.username or parsed.password:
-            raise GatewayError(
-                "public_read_destination_denied",
-                "URLs containing credentials are not allowed",
-                status_code=403,
-                url=current,
-            )
-
-        expected_port = 443 if scheme == "https" else 80
-        port = parsed.port or expected_port
-        if port != expected_port:
-            raise GatewayError(
-                "public_read_destination_denied",
-                "Only standard HTTP and HTTPS ports are allowed",
-                status_code=403,
-                url=current,
-                port=port,
-            )
-
-        # IP literals are accepted only when they are globally routable. DNS
-        # names are resolved once and the request is pinned to that address.
-        try:
-            literal = ipaddress.ip_address(host)
-        except ValueError:
-            pinned_ip = await _resolve_public_host(host, port)
-        else:
-            if not literal.is_global:
-                raise GatewayError(
-                    "public_read_destination_denied",
-                    "Private, reserved, and loopback addresses are not allowed",
-                    status_code=403,
-                    url=current,
-                )
-            pinned_ip = str(literal)
-
-        pinned_url = parsed.copy_with(host=pinned_ip)
-        host_header = f"[{host}]" if ":" in host else host
-        headers = {
-            "Host": host_header,
-            "User-Agent": "Luna-safe-research-reader/1.0",
-            "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9",
-        }
-
-        try:
-            async with httpx.AsyncClient(
-                follow_redirects=False,
-                timeout=httpx.Timeout(20.0, connect=10.0),
-                trust_env=False,
-            ) as client:
-                async with client.stream(
-                    "GET",
-                    pinned_url,
-                    headers=headers,
-                    extensions={"sni_hostname": host},
-                ) as response:
-                    if response.status_code in {301, 302, 303, 307, 308}:
-                        location = response.headers.get("location")
-                        if not location:
-                            raise GatewayError(
-                                "public_read_bad_redirect",
-                                "Result page returned a redirect without a destination",
-                                status_code=502,
-                                url=current,
-                            )
-                        if redirect_count >= _PUBLIC_READ_MAX_REDIRECTS:
-                            raise GatewayError(
-                                "public_read_too_many_redirects",
-                                "Result page exceeded the redirect limit",
-                                status_code=502,
-                                url=start_url,
-                            )
-                        current = urljoin(current, location)
-                        continue
-
-                    response.raise_for_status()
-                    content_type = response.headers.get("content-type", "").lower()
-                    if not any(content_type.startswith(value) for value in _PUBLIC_READ_CONTENT_TYPES):
-                        raise GatewayError(
-                            "public_read_content_type_denied",
-                            "Result is not a supported text web page",
-                            status_code=415,
-                            url=current,
-                            content_type=content_type,
-                        )
-
-                    body = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        body.extend(chunk)
-                        if len(body) > _PUBLIC_READ_MAX_BYTES:
-                            raise GatewayError(
-                                "public_read_too_large",
-                                "Result page exceeded the safe reader size limit",
-                                status_code=413,
-                                url=current,
-                            )
-                    return current, bytes(body), response.encoding
-        except GatewayError:
-            raise
-        except httpx.HTTPStatusError as exc:
-            raise GatewayError(
-                "public_read_bad_status",
-                "Result page returned an unsuccessful HTTP status",
-                status_code=502,
-                url=current,
-                http_status=exc.response.status_code,
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise GatewayError(
-                "public_read_failed",
-                "Could not fetch the public result page",
-                status_code=502,
-                url=current,
-                cause=str(exc),
-            ) from exc
-
-    raise GatewayError(
-        "public_read_too_many_redirects",
-        "Result page exceeded the redirect limit",
-        status_code=502,
-        url=start_url,
-    )
-
-
-async def read_public_result(req: PublicReadRequest) -> PublicReadResponse:
-    start_url = str(req.url)
-    final_url, body, encoding = await _safe_public_fetch(start_url)
-    html = body.decode(encoding or "utf-8", errors="replace")
-    title = _extract_title(html)
-    markdown, extraction_method = _extract_markdown(html, final_url)
-    text = markdown[: req.max_chars].rstrip()
-    return PublicReadResponse(
-        url=start_url,
-        final_url=final_url,
-        title=title,
-        text=text,
-        excerpt=_excerpt(text),
-        word_count=_word_count(text),
-        method=f"safe-http+{extraction_method}",
-    )
 
 
 async def read_url(req: ReadUrlRequest) -> Document:
@@ -929,57 +720,6 @@ def _extract_markdown(html: str, url: str) -> tuple[str, str]:
     text = re.sub(r"(?s)<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text, "html_text_fallback"
-
-
-async def research(req: ResearchRequest) -> ResearchResponse:
-    search = await search_web(
-        SearchWebRequest(query=req.query, limit=req.max_sources, freshness=req.freshness)
-    )
-    sources: list[ResearchSource] = []
-    failed_urls: list[ResearchFailure] = []
-
-    for result in search.results[: req.max_sources]:
-        try:
-            doc = await read_url(
-                ReadUrlRequest(
-                    url=result.url,
-                    strategy=req.read_strategy,
-                    browser_profile=req.browser_profile,
-                    include_markdown=req.include_markdown,
-                )
-            )
-            sources.append(
-                ResearchSource(
-                    doc_id=doc.doc_id,
-                    title=doc.title,
-                    url=doc.url,
-                    excerpt=doc.excerpt,
-                    retrieved_at=doc.retrieved_at,
-                    method=doc.method,
-                    strategy_used=doc.strategy_used,
-                    attempts=doc.attempts,
-                    markdown=doc.markdown if req.include_markdown else None,
-                )
-            )
-        except GatewayError as exc:
-            failed_urls.append(
-                ResearchFailure(
-                    url=result.url,
-                    code=exc.code,
-                    message=exc.message,
-                    details=exc.context,
-                )
-            )
-        except Exception as exc:
-            failed_urls.append(
-                ResearchFailure(
-                    url=result.url,
-                    code="read_failed",
-                    message=str(exc),
-                )
-            )
-
-    return ResearchResponse(query=req.query, sources=sources, failed_urls=failed_urls)
 
 
 async def batch_fetch(req: BatchFetchRequest) -> BatchFetchResponse:

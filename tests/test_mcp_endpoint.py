@@ -2,6 +2,7 @@
 import unittest
 from starlette.testclient import TestClient
 from research_mcp_service.server import create_app
+from mcp_helpers import tool_data
 
 TOKEN = 'offline-test-token-not-for-deployment-123456'
 HEADERS = {'Authorization': 'Bearer ' + TOKEN,
@@ -35,7 +36,7 @@ class MCPEndpointTests(unittest.TestCase):
             response = client.post('/mcp', headers=HEADERS, json={
                 'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
                 'params': {'name': 'health', 'arguments': {}}})
-            self.assertEqual(response.json()['result']['structuredContent']['status'], 'ok')
+            self.assertEqual(tool_data(response.json()['result'])['status'], 'ok')
 
     def test_untrusted_host_and_origin_rejected(self):
         with self.client() as client:

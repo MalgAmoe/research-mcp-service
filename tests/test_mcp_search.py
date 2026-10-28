@@ -8,6 +8,7 @@ from starlette.testclient import TestClient
 from research_gateway.models import SearchResult, SearchWebResponse
 from research_mcp_service.search import search_backend, execute_search, SearchOptions
 from research_mcp_service.server import create_app
+from mcp_helpers import tool_data
 
 TOKEN = 'offline-test-token-not-for-deployment-123456'
 HEADERS = {'Authorization': 'Bearer ' + TOKEN, 'Accept': 'application/json, text/event-stream'}
@@ -30,7 +31,7 @@ class SearchToolTests(unittest.TestCase):
             schema = next(t for t in tools if t['name'] == 'search')['inputSchema']
             self.assertNotIn('category', schema['properties'])
             response = client.post('/mcp', headers=HEADERS, json=call({'query': ' test ', 'limit': 3}))
-            result = response.json()['result']['structuredContent']
+            result = tool_data(response.json()['result'])
             self.assertEqual(result['results'], RESULT['results'])
             self.assertNotIn('status', result)
             self.assertNotIn('diagnostics', result)
@@ -40,7 +41,7 @@ class SearchToolTests(unittest.TestCase):
     def test_explicit_diagnostics_are_available_through_mcp(self):
         with TestClient(create_app(TOKEN, search_backend=AsyncMock(return_value=RESULT)), base_url='http://127.0.0.1:8766') as client:
             response = client.post('/mcp', headers=HEADERS, json=call({'query': 'test', 'diagnostics': True}))
-            result = response.json()['result']['structuredContent']
+            result = tool_data(response.json()['result'])
             self.assertEqual(result['diagnostics']['status'], 'degraded')
             self.assertEqual(result['diagnostics']['engine_failures'], RESULT['engine_failures'])
 

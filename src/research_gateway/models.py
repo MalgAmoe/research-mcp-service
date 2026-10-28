@@ -15,12 +15,6 @@ class Freshness(StrEnum):
     year = "year"
 
 
-class RenderJs(StrEnum):
-    auto = "auto"
-    never = "never"
-    always = "always"
-
-
 class ReadStrategy(StrEnum):
     light = "light"
     standard = "standard"
@@ -31,21 +25,6 @@ class ReadStrategy(StrEnum):
 class BrowserProfile(StrEnum):
     standard = "standard"
     stealth = "stealth"
-
-
-class ResearchDepth(StrEnum):
-    shallow = "shallow"
-    normal = "normal"
-    deep = "deep"
-
-
-class JobStatus(StrEnum):
-    # Shared acquisition-response enum; no background job queue is implemented.
-    queued = "queued"
-    running = "running"
-    done = "done"
-    failed = "failed"
-    cancelled = "cancelled"
 
 
 class SearchWebRequest(BaseModel):
@@ -97,35 +76,17 @@ class SearchWebResponse(BaseModel):
     attempts: list[SearchAttempt] = Field(default_factory=list)
 
 
-class PublicReadRequest(BaseModel):
-    url: HttpUrl
-    max_chars: int = Field(default=30000, ge=1000, le=50000)
-
-
-class PublicReadResponse(BaseModel):
-    url: str
-    final_url: str
-    title: str | None = None
-    text: str
-    excerpt: str
-    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    word_count: int
-    method: str = "safe-http+trafilatura"
-
-
 class ReadUrlRequest(BaseModel):
     url: HttpUrl
     force_refresh: bool = False
     strategy: ReadStrategy = ReadStrategy.standard
     browser_profile: BrowserProfile = BrowserProfile.standard
-    render_js: RenderJs = RenderJs.auto
     include_markdown: bool = True
     include_diagnostics: bool = True
 
 
 class DocumentStrategy(StrEnum):
     text = "text"
-    structured = "structured"
 
 
 class ConvertDocumentRequest(BaseModel):
@@ -173,16 +134,6 @@ class Document(BaseModel):
     metadata: DocumentMetadata = Field(default_factory=DocumentMetadata)
 
 
-class ResearchRequest(BaseModel):
-    query: str = Field(min_length=1)
-    max_sources: int = Field(default=5, ge=1, le=20)
-    freshness: Freshness = Freshness.any
-    depth: ResearchDepth = ResearchDepth.shallow
-    read_strategy: ReadStrategy = ReadStrategy.light
-    browser_profile: BrowserProfile = BrowserProfile.standard
-    include_markdown: bool = False
-
-
 class BatchFetchRequest(BaseModel):
     urls: list[HttpUrl] = Field(min_length=1, max_length=15)
     strategy: ReadStrategy = ReadStrategy.light
@@ -212,16 +163,8 @@ class ResearchFailure(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class ResearchResponse(BaseModel):
-    query: str
-    job_id: str | None = None
-    status: JobStatus = JobStatus.done
-    sources: list[ResearchSource]
-    failed_urls: list[ResearchFailure] = Field(default_factory=list)
-
-
 class BatchFetchResponse(BaseModel):
-    status: JobStatus = JobStatus.done
+    status: Literal["done"] = "done"
     sources: list[ResearchSource]
     failed_urls: list[ResearchFailure] = Field(default_factory=list)
 

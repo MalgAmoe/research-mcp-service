@@ -14,7 +14,7 @@ Client → bearer-authenticated MCP process
                                                           └─ public HTTP(S)
 ```
 
-The control gateway requires WORKER_SOCKET; read/conversion/feed failures do not fall back to host fetching. Legacy direct-search/research/safe-read HTTP routes are blocked by its route allowlist. MCP research uses the existing search backend followed by isolated batch reading. Copied standalone-library routes still exist for compatibility tests; they are not an alternative production entry point.
+The control gateway requires WORKER_SOCKET; read/conversion/feed failures do not fall back to host fetching. Legacy direct-search/research/safe-read HTTP routes have been removed, and the route allowlist still rejects them. MCP research uses the configured search backend followed by isolated batch reading; missing search configuration fails closed rather than falling back to a legacy route. Document conversion requires worker RPC even when called directly. Shared extraction functions remain in the gateway package for execution inside the isolated worker.
 
 The worker is non-root, read-only, capability-dropped, resource-limited, without storage credentials or storage-network membership. It rejects startup with non-loopback interfaces or prohibited credential environment variables. The control mounts worker RPC read-only; the worker mounts the egress socket read-only. Browser profiles and downloaded working files live in bounded temporary storage, not personal host mounts.
 

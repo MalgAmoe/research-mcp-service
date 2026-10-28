@@ -122,16 +122,14 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
         if not query:
             raise ToolError('Enter a nonempty research query.')
         _profile(read_strategy, browser_profile)
-        if research_search is not None:
-            results = await research_search(query, max_sources, freshness)
-            urls = list(dict.fromkeys(_url(item['url']) for item in results.get('results', []) if item.get('url')))[:max_sources]
-            fetched = await request('POST', '/batch_fetch', payload=dict(urls=urls,
-                strategy=read_strategy, browser_profile=browser_profile, include_markdown=include_markdown,
-                max_concurrency=2)) if urls else {'documents': [], 'failed_urls': []}
-            return {'query': query, 'search': results, **fetched}
-        return await request('POST', '/research', payload=dict(query=query, max_sources=max_sources,
-            read_strategy=read_strategy, browser_profile=browser_profile, freshness=freshness,
-            include_markdown=include_markdown))
+        if research_search is None:
+            raise ToolError('Research requires a configured search backend.')
+        results = await research_search(query, max_sources, freshness)
+        urls = list(dict.fromkeys(_url(item['url']) for item in results.get('results', []) if item.get('url')))[:max_sources]
+        fetched = await request('POST', '/batch_fetch', payload=dict(urls=urls,
+            strategy=read_strategy, browser_profile=browser_profile, include_markdown=include_markdown,
+            max_concurrency=2)) if urls else {'documents': [], 'failed_urls': []}
+        return {'query': query, 'search': results, **fetched}
 
     @server.tool(annotations=FETCH)
     async def web_convert_document(url: Url, strategy: Literal['text'] = 'text',

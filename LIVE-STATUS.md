@@ -1,5 +1,13 @@
 # Private development deployment
 
+## Source cleanup after deployment — not yet deployed
+
+Removed obsolete standalone safe-reader/DNS code and direct search/research HTTP routes, their request/response models, the unused render_js option and queued-job status scaffold. Batch responses still report status=done. Removed the direct-HTTP document-conversion fallback and the unimplemented structured strategy placeholder. Production extraction and egress remain intact.
+
+Removed test_contract.py (six tests, covering obsolete route/DNS contracts plus redundant model defaults/validation). Removed the noncompact create_app mode; protocol tests now assert one text representation and no structuredContent. Replaced the legacy research forwarding case with search → unique-URL batch-fetch checks, including empty/error results and missing-search rejection. Retained active security, retention/persistence, extraction and user-feedback regressions. The revised 108-test suite passes offline.
+
+No live services restarted for this cleanup; the deployed code and snapshots remain those below. No evidence, credentials or volumes were deleted.
+
 ## Deployed release 5018cf5
 
 Both clarity and navigation/link changes are live. The endpoint advertises 34 tools. Live MCP checks passed: heading index, artifact booleans, preview metadata, back/forward URLs, text/element matching, unmatched-condition timeout retaining observation, oversized screenshot fallback, unsupported-format errors, and the NASA project guide PDF (58 URI/internal link annotations). All 112 offline tests pass. Probe browser session was closed. No storage or feed data was purged.

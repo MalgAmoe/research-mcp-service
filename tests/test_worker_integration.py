@@ -39,9 +39,10 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             result = await prepare_document(ConvertDocumentRequest(url='https://example.org/report.pdf'))
             self.assertEqual(result, (b'original', 'application/pdf', '.pdf', '## Page 1\nContent', {}))
             convert.assert_not_awaited()
-            with self.assertRaises(GatewayError):
-                await prepare_document(ConvertDocumentRequest(url='https://example.org/report.pdf', strategy='structured'))
             self.assertEqual(backend.run.await_count, 1)
+        with patch('research_gateway.document_io.settings', SimpleNamespace(worker_socket=None)):
+            with self.assertRaisesRegex(GatewayError, 'isolated worker'):
+                await prepare_document(ConvertDocumentRequest(url='https://example.org/report.pdf'))
 
     async def test_rss_worker_serialization_preserves_ids_and_dates(self):
         xml = '<rss version="2.0"><channel><title>Feed</title><item><title>Entry</title><link>https://example.org/item</link><pubDate>Tue, 27 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>'

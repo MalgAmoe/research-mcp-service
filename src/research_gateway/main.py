@@ -12,19 +12,13 @@ from .models import (
     ConvertDocumentRequest,
     ConvertedDocument,
     Document,
-    PublicReadRequest,
-    PublicReadResponse,
     ReadUrlRequest,
-    ResearchRequest,
-    ResearchResponse,
     RssFeed,
     RssFeedEntry,
     RssFetchRequest,
     RssFetchResponse,
     RssListResponse,
     RssSubscribeRequest,
-    SearchWebRequest,
-    SearchWebResponse,
 )
 from .storage import artifact_store, redis_store
 from .services import (
@@ -32,9 +26,7 @@ from .services import (
     convert_document,
     get_document,
     list_recent_documents,
-    read_public_result,
     read_url,
-    research,
     rss_fetch,
     rss_get_entries,
     rss_get_entry,
@@ -42,7 +34,6 @@ from .services import (
     rss_mark_read,
     rss_preview,
     rss_subscribe,
-    search_web,
 )
 
 app = FastAPI(
@@ -90,7 +81,6 @@ async def capabilities() -> dict[str, object]:
         "document_conversion": {
             "strategies": {
                 "text": "lightweight parsers",
-                "structured": "reserved for future heavy structured parsing backend",
             },
             "supported_types": ["pdf", "txt", "md", "html", "docx", "pptx"],
             "detected_file_types": ["xlsx", "csv", "json", "parquet", "zip"],
@@ -122,22 +112,6 @@ async def health_dependencies() -> dict[str, str]:
     return status
 
 
-@app.post("/search_web", response_model=SearchWebResponse)
-async def api_search_web(req: SearchWebRequest) -> SearchWebResponse:
-    try:
-        return await search_web(req)
-    except GatewayError as exc:
-        raise exc.to_http() from exc
-
-
-@app.post("/safe_read_url", response_model=PublicReadResponse)
-async def api_safe_read_url(req: PublicReadRequest) -> PublicReadResponse:
-    try:
-        return await read_public_result(req)
-    except GatewayError as exc:
-        raise exc.to_http() from exc
-
-
 @app.post("/read_url", response_model=Document)
 async def api_read_url(req: ReadUrlRequest) -> Document:
     try:
@@ -149,14 +123,6 @@ async def api_read_url(req: ReadUrlRequest) -> Document:
             status_code=500,
             detail={"code": "internal_error", "message": "Unexpected read_url failure"},
         ) from exc
-
-
-@app.post("/research", response_model=ResearchResponse)
-async def api_research(req: ResearchRequest) -> ResearchResponse:
-    try:
-        return await research(req)
-    except GatewayError as exc:
-        raise exc.to_http() from exc
 
 
 @app.post("/batch_fetch", response_model=BatchFetchResponse)

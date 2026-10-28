@@ -37,7 +37,7 @@ uv sync --locked --no-dev
 .venv/bin/python -m unittest discover -s tests -q
 ```
 
-Offline tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
+Offline tests exercise the production text-only MCP format, search → batch research orchestration, extraction/presentation regressions, storage maintenance and runtime safety boundaries. Legacy standalone-route tests and the noncompact app mode are removed. Tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
 
 Initial configuration helpers: `scripts/init_mcp.py`, `scripts/init_search.py`, `scripts/init_storage.py`. They refuse to overwrite existing configuration. Full runtime setup additionally requires a private random `GATEWAY_TOKEN` in `.env.control` and the matching mode-0600 `.secrets/gateway-token`. Never copy credentials from another service. See LIVE-STATUS for the existing deployment rather than rerunning initialization.
 

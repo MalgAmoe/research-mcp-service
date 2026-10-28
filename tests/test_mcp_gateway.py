@@ -9,6 +9,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp_service.gateway import GatewayClient, GatewayCalls, MAX_ARTIFACT_BYTES, MAX_RESPONSE_BYTES
 from research_mcp_service.server import create_app
+from mcp_helpers import tool_data
 
 TOKEN = 'offline-test-token-not-for-deployment-123456'
 HEADERS = {'Authorization': 'Bearer ' + TOKEN, 'Accept': 'application/json, text/event-stream'}
@@ -17,7 +18,6 @@ CASES = [
     ('web_capabilities', {}, 'GET', '/capabilities', {}),
     ('web_read', {'url': URL}, 'POST', '/read_url', {'payload': dict(url=URL, strategy='light', browser_profile='standard', force_refresh=False, include_markdown=False, include_diagnostics=True)}),
     ('web_batch_fetch', {'urls': [URL]}, 'POST', '/batch_fetch', {'payload': dict(urls=[URL], strategy='light', browser_profile='standard', force_refresh=False, include_markdown=False, include_diagnostics=True, max_concurrency=5)}),
-    ('web_research', {'query': ' research '}, 'POST', '/research', {'payload': dict(query='research', max_sources=5, read_strategy='light', browser_profile='standard', freshness='any', include_markdown=False)}),
     ('web_convert_document', {'url': URL}, 'POST', '/convert_document', {'payload': dict(url=URL, strategy='text', include_markdown=False)}),
     ('web_document_find', {'doc_id': 'doc_123', 'query': 'example'}, 'GET', '/documents/doc_123', {'params': {'include_markdown': True}}),
     ('web_document', {'doc_id': 'doc_123'}, 'GET', '/documents/doc_123', {'params': {'include_markdown': False}}),
@@ -42,7 +42,7 @@ class GatewayToolTests(unittest.TestCase):
         backend = AsyncMock(return_value={})
         with TestClient(create_app(TOKEN, gateway_backend=backend), base_url='http://127.0.0.1:8766') as client:
             tools = client.post('/mcp', headers=HEADERS, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']
-            self.assertEqual({t['name'] for t in tools}, {'health', *(case[0] for case in CASES)})
+            self.assertEqual({t['name'] for t in tools}, {'health', 'web_research', *(case[0] for case in CASES)})
             annotations = {t['name']: t['annotations'] for t in tools}
             self.assertFalse(annotations['rss_subscribe']['readOnlyHint'])
             self.assertFalse(annotations['web_read']['readOnlyHint'])
@@ -54,6 +54,34 @@ class GatewayToolTests(unittest.TestCase):
                     response = client.post('/mcp', headers=HEADERS, json=rpc(name, args)).json()['result']
                     self.assertFalse(response.get('isError'), response)
                     backend.assert_awaited_once_with(method, path, **kwargs)
+
+    def test_research_searches_then_batches_unique_urls(self):
+        search = AsyncMock(return_value={'query': 'research', 'results': [{'url': URL}, {'url': URL}], 'status': 'ok'})
+        backend = AsyncMock(return_value={'sources': [], 'failed_urls': []})
+        with TestClient(create_app(TOKEN, search_backend=search, gateway_backend=backend), base_url='http://127.0.0.1:8766') as client:
+            result = tool_data(client.post('/mcp', headers=HEADERS, json=rpc('web_research', {'query': ' research '})).json()['result'])
+            search.assert_awaited_once_with('research', 5, 'any')
+            backend.assert_awaited_once_with('POST', '/batch_fetch', payload=dict(urls=[URL],
+                strategy='light', browser_profile='standard', include_markdown=False, max_concurrency=2))
+            self.assertEqual(result['query'], 'research')
+            backend.reset_mock()
+            search.return_value = {'query': 'empty', 'results': [], 'status': 'no_results'}
+            result = tool_data(client.post('/mcp', headers=HEADERS, json=rpc('web_research', {'query': 'empty'})).json()['result'])
+            backend.assert_not_awaited()
+            self.assertEqual(result['search']['returned_count'], 0)
+            self.assertEqual(result['search']['message'], 'No results were returned for this search.')
+            search.side_effect = RuntimeError('private-password')
+            failed = client.post('/mcp', headers=HEADERS, json=rpc('web_research', {'query': 'failed'})).json()['result']
+            self.assertTrue(failed['isError'])
+            self.assertNotIn('private-password', str(failed))
+            backend.assert_not_awaited()
+
+    def test_research_without_search_fails_closed(self):
+        backend = AsyncMock()
+        with TestClient(create_app(TOKEN, gateway_backend=backend), base_url='http://127.0.0.1:8766') as client:
+            result = client.post('/mcp', headers=HEADERS, json=rpc('web_research', {'query': 'research'})).json()['result']
+            self.assertTrue(result['isError'])
+            backend.assert_not_awaited()
 
     def test_invalid_inputs_do_not_reach_backend(self):
         backend = AsyncMock(return_value={})
@@ -91,7 +119,7 @@ class GatewayToolTests(unittest.TestCase):
             response = client.post('/mcp', headers=HEADERS, json=rpc('web_document', {'doc_id': 'doc_123'}))
             self.assertNotIn('private-password', response.text)
             self.assertNotIn('s3://', response.text)
-            self.assertEqual(response.json()['result']['structuredContent']['artifacts'], {'original': True, 'markdown': True})
+            self.assertEqual(tool_data(response.json()['result'])['artifacts'], {'original': True, 'markdown': True})
 
     def test_exceptions_are_sanitized_and_deadlines_release_capacity(self):
         backend = AsyncMock(side_effect=RuntimeError('private-password'))
