@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from research_mcp_service.build_info import SOURCE_SNAPSHOT
 from .errors import GatewayError
 from .models import (
     BatchFetchRequest,
@@ -63,7 +64,7 @@ async def retention_guard(request, call_next):
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "source_snapshot": SOURCE_SNAPSHOT}
 
 
 @app.get("/capabilities")

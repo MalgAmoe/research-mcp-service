@@ -1,5 +1,26 @@
-"""Deterministic lookup in cleaned cached Markdown, without changing extraction."""
+"""Deterministic navigation in cleaned cached Markdown; offsets are characters."""
 import re
+
+
+def heading_index(text):
+    headings = []
+    offset = 0
+    fence = None
+    for line in text.splitlines(keepends=True):
+        marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line.rstrip('\r\n'))
+        if marker:
+            token, rest = marker.groups()
+            if fence is None:
+                fence = token
+            elif token[0] == fence[0] and len(token) >= len(fence) and not rest.strip():
+                fence = None
+        elif fence is None:
+            match = re.match(r'^ {0,3}(#{1,6})[ \t]+(.+?)\s*$', line.rstrip('\n\r'))
+            if match:
+                title = re.sub(r'[ \t]+#+[ \t]*$', '', match.group(2))
+                headings.append({'offset': offset, 'level': len(match.group(1)), 'title': title})
+        offset += len(line)
+    return headings
 
 
 def locate(text, heading=None, query=None, occurrence=1):
@@ -14,26 +35,12 @@ def locate(text, heading=None, query=None, occurrence=1):
         match = matches[occurrence - 1]
         return {'start': max(0, match.start() - 300), 'end': len(text),
                 'match_offset': match.start()}, len(matches)
-    headings = []
-    offset = 0
-    fence = None
-    for line in text.splitlines(keepends=True):
-        marker = re.match(r'^\s{0,3}(`{3,}|~{3,})', line)
-        if marker:
-            token = marker.group(1)
-            if fence is None:
-                fence = token
-            elif token[0] == fence[0] and len(token) >= len(fence):
-                fence = None
-        elif fence is None:
-            match = re.match(r'^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$', line.rstrip('\n\r'))
-            if match:
-                headings.append((offset, len(match.group(1)), match.group(2)))
-        offset += len(line)
-    matches = [i for i, (_, _, title) in enumerate(headings) if heading.casefold() in title.casefold()]
+    headings = heading_index(text)
+    matches = [i for i, item in enumerate(headings) if heading.casefold() in item['title'].casefold()]
     if len(matches) < occurrence:
         return None, len(matches)
     index = matches[occurrence - 1]
-    start, level, title = headings[index]
-    end = next((pos for pos, depth, _ in headings[index + 1:] if depth <= level), len(text))
-    return {'start': start, 'end': end, 'heading': title, 'match_offset': start}, len(matches)
+    selected = headings[index]
+    end = next((item['offset'] for item in headings[index + 1:] if item['level'] <= selected['level']), len(text))
+    return {'start': selected['offset'], 'end': end, 'heading': selected['title'],
+            'match_offset': selected['offset']}, len(matches)

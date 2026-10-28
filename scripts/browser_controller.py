@@ -254,20 +254,27 @@ async def observe_session(params: dict[str, Any]) -> dict[str, Any]:
     session = _get_session(params["session_id"])
     page = session.page
     observed = await page.evaluate(OBSERVE_JS)
+    observed_url, observed_title = page.url, await page.title()
     screenshot_b64 = None
+    warnings = []
     if params.get("include_screenshot", False):
-        png = await page.screenshot(full_page=bool(params.get("full_page", False)))
-        if len(png) > 1024 * 1024:
-            raise ValueError('Screenshot exceeds 1 MiB; try a viewport screenshot or smaller viewport')
-        screenshot_b64 = base64.b64encode(png).decode("ascii")
+        try:
+            png = await page.screenshot(full_page=bool(params.get("full_page", False)), timeout=10000)
+            if len(png) > 1024 * 1024:
+                warnings.append({'code': 'screenshot_limit', 'message': 'Screenshot exceeds 1 MiB; use a viewport screenshot or smaller viewport.'})
+            else:
+                screenshot_b64 = base64.b64encode(png).decode("ascii")
+        except Exception:
+            warnings.append({'code': 'screenshot_failed', 'message': 'Screenshot capture failed; the preceding page observation is retained.'})
     return {
         "session_id": session.session_id,
         "profile": session.profile,
-        "url": page.url,
-        "title": await page.title(),
+        "url": observed_url,
+        "title": observed_title,
         "visible_text": observed.get("visibleText", ""),
         "snapshot": observed.get("nodes", []),
         "screenshot_base64": screenshot_b64,
+        "warnings": warnings,
         "diagnostics": {
             "main_status": session.main_status,
             "request_count": session.request_count,

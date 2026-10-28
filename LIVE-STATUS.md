@@ -1,5 +1,18 @@
 # Private development deployment
 
+## Prepared clarity release — not deployed
+
+Source changes passed 108 offline tests; live processes/images have not been restarted:
+
+- MCP/control/worker health captures a source SHA-256 once at module import. It hashes packaged Python sources and the controller when present, not credentials/configuration. This identifies a startup source snapshot, not a dependency/image digest; components may differ. No dynamic Git HEAD lookup.
+- `web_document(include_headings=true, heading_offset=0)` returns 100 ATX heading entries per index page with cleaned-Markdown character offsets. The heading index and targeted lookup share one parser; no extraction or stored data changes.
+- Screenshot size/capture failure returns the preceding observation plus a safe warning. This does not guarantee recovery from a crashed browser or whole-worker deadline.
+- Preview removes synthetic subscribed_at and declares preview=true/subscription_changed=false; it does not falsely claim an already-subscribed feed is unsubscribed.
+- Compact output retains boolean artifact availability fields.
+- Unsupported conversion format, conversion exception, HTTP timeout and worker deadline now have distinct codes. Unknown causes remain generic; HTTP 403 is not automatically described as a CAPTCHA/block.
+
+Deployment requires coordinated control/worker rebuild and MCP restart, followed by live checks. Worker recreation expires interactive sessions. No wait-for-condition/history/PDF-link features are included in this release.
+
 ## Targeted retrieval and safe errors
 
 Live endpoint now exposes 31 tools, including `web_document_find(doc_id, heading=... OR query=..., occurrence=1, max_chars=12000)`. Case-insensitive literal phrase lookup and ATX Markdown heading substring lookup return bounded cached passages with absolute offsets; fenced code headings are ignored. Heading results stop at the next same/higher-level heading, including subsections. No extraction engine or stored original changes. Setext headings and semantic search are not implemented; the existing 2 MiB backend response ceiling still applies.

@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 import uvicorn
 
 from .egress_bridge import Bridge
+from .build_info import SOURCE_SNAPSHOT
 from .browser_process import BrowserProcess, ACTIONS
 
 
@@ -102,7 +103,7 @@ def create_worker_app(executor=run_job, timeout=75):
 
     @app.get('/health')
     async def health():
-        return {'status': 'ok', 'role': 'isolated-fetch-worker'}
+        return {'status': 'ok', 'role': 'isolated-fetch-worker', 'source_snapshot': SOURCE_SNAPSHOT}
 
     @app.post('/run')
     async def run(request: Request):

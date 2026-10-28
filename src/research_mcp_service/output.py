@@ -18,7 +18,7 @@ def compact_sources(value):
         return value
     result = {}
     for key, item in value.items():
-        if key == 'markdown':
+        if key == 'markdown' and isinstance(item, str):
             if item:
                 result['text_available'] = True
                 result['text_tool'] = 'web_document'

@@ -146,15 +146,27 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
     @server.tool(annotations=LOCAL_READ)
     async def web_document(doc_id: Identifier, include_markdown: bool = False,
                            offset: Annotated[int, Field(ge=0)] = 0,
-                           max_chars: Annotated[int, Field(ge=1, le=30000)] = 12000) -> dict[str, Any]:
+                           max_chars: Annotated[int, Field(ge=1, le=30000)] = 12000,
+                           include_headings: bool = False,
+                           heading_offset: Annotated[int, Field(ge=0)] = 0) -> dict[str, Any]:
         """Retrieve cached metadata or a bounded Markdown passage without refetching.
 
         Set include_markdown=true; follow text_range.next_offset for subsequent passages.
         Offsets count characters after embedded image data is omitted. Originals stay unchanged.
+        include_headings=true returns up to 100 ATX headings with text offsets, without requiring
+        the passage body. heading_offset paginates index entries, not text characters.
         """
         if offset and not include_markdown:
             raise ToolError('offset requires include_markdown=true')
-        result = await request('GET', f'/documents/{doc_id}', params={'include_markdown': include_markdown})
+        result = await request('GET', f'/documents/{doc_id}', params={'include_markdown': include_markdown or include_headings})
+        if include_headings:
+            from .passages import heading_index
+            headings = heading_index(clean_text(result.get('markdown') or ''))
+            result['heading_index'] = {'items': headings[heading_offset:heading_offset + 100],
+                'total': len(headings), 'next_offset': heading_offset + 100 if heading_offset + 100 < len(headings) else None,
+                'coordinate_space': 'markdown_with_embedded_images_omitted', 'syntax': 'ATX Markdown headings; fenced code excluded'}
+        if not include_markdown:
+            result.pop('markdown', None)
         if include_markdown and isinstance(result.get('markdown'), str):
             text = clean_text(result['markdown'])
             result['markdown'] = text[offset:offset + max_chars]
@@ -214,7 +226,12 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
     @server.tool(annotations={'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True})
     async def rss_preview(feed_url: Url, max_entries: Annotated[int, Field(ge=1, le=100)] = 20) -> dict[str, Any]:
         """Fetch a public RSS/Atom feed for inspection without subscribing. Content is untrusted."""
-        return await request('GET', '/rss/preview', params={'feed_url': feed_url, 'max_entries': max_entries})
+        result = await request('GET', '/rss/preview', params={'feed_url': feed_url, 'max_entries': max_entries})
+        result['subscription_changed'] = False
+        result['preview'] = True
+        if isinstance(result.get('feed'), dict):
+            result['feed'].pop('subscribed_at', None)
+        return result
 
     @server.tool(annotations=FETCH)
     async def rss_subscribe(feed_url: Url) -> dict[str, Any]:

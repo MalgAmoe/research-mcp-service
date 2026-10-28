@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 import uvicorn
 
 from .presentation import present_search
+from .build_info import SOURCE_SNAPSHOT
 
 
 class BearerAuth:
@@ -59,7 +60,7 @@ def create_app(token: str, host: str = '127.0.0.1', port: int = 8766,
     @server.tool(annotations={'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': False})
     def health() -> dict[str, str]:
         """Check that authenticated MCP tool calls reach this server. Does not check research backends."""
-        return {'status': 'ok', 'service': 'research-mcp-service',
+        return {'status': 'ok', 'service': 'research-mcp-service', 'source_snapshot': SOURCE_SNAPSHOT,
                 'stage': 'research-adapters-enabled' if gateway_backend is not None or browser_backend is not None else
                          ('search-enabled' if search_backend else 'connectivity-only')}
 

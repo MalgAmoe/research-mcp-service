@@ -1,5 +1,8 @@
 """Allowlisted failure details; never forward raw exceptions or backend addresses."""
 MESSAGES = {
+    'fetch_timeout': 'HTTP fetching exceeded its timeout.',
+    'unsupported_format': 'Document format is not supported.',
+    'worker_timeout': 'Worker execution exceeded its deadline.',
     'fetch_bad_status': 'Website returned an unsuccessful HTTP status.',
     'browser_bad_status': 'Website returned an unsuccessful HTTP status during browser reading.',
     'fetch_failed': 'HTTP fetching failed.',
@@ -17,7 +20,7 @@ def safe_error(value):
     if not isinstance(value, dict):
         return {}
     code = value.get('code')
-    result = {'code': code, 'message': MESSAGES[code]} if code in MESSAGES else {}
+    result = {'code': code, 'message': MESSAGES[code]} if isinstance(code, str) and code in MESSAGES else {}
     status = value.get('http_status')
     if type(status) is int and 400 <= status <= 599:
         result['http_status'] = status

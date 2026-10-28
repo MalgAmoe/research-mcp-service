@@ -11,6 +11,8 @@ async def download(url: str, *, max_bytes: int = 20 * 1024 * 1024) -> httpx.Resp
     except httpx.HTTPStatusError as exc:
         raise GatewayError('fetch_bad_status', 'URL returned an unsuccessful HTTP status',
                            status_code=502, http_status=exc.response.status_code) from None
+    except httpx.TimeoutException:
+        raise GatewayError('fetch_timeout', 'HTTP fetching exceeded its timeout', status_code=504) from None
     except httpx.HTTPError:
         raise GatewayError('fetch_failed', 'Could not fetch URL through the worker proxy', status_code=502) from None
 

@@ -41,6 +41,8 @@ class WorkerClient:
                         async with client.stream('POST', path, json=payload) as response:
                             if response.status_code == 503:
                                 raise GatewayError('worker_busy', 'Isolated worker is busy; retry shortly', status_code=503)
+                            if response.status_code == 504:
+                                raise GatewayError('worker_timeout', 'Worker execution exceeded its deadline', status_code=504)
                             if response.status_code != 200:
                                 raise GatewayError('worker_unavailable', 'Isolated worker could not complete the request', status_code=502)
                             data = bytearray()
@@ -66,5 +68,7 @@ class WorkerClient:
                             return result['result']
             except GatewayError:
                 raise
-            except (TimeoutError, httpx.HTTPError, ValueError, TypeError, AttributeError):
+            except (TimeoutError, httpx.TimeoutException):
+                raise GatewayError('worker_timeout', 'Worker response deadline exceeded', status_code=504) from None
+            except (httpx.HTTPError, ValueError, TypeError, AttributeError):
                 raise GatewayError('worker_unavailable', 'Isolated worker unavailable or timed out', status_code=502) from None

@@ -28,7 +28,12 @@ async def execute(job):
         response = await download(str(request.url))
         content_type = response.headers.get('content-type')
         suffix = services._suffix_for_document(str(response.url), content_type)
-        markdown = await services._convert_document_content(response.content, suffix)
+        if services._document_method_for_suffix(suffix) == 'unsupported':
+            raise GatewayError('unsupported_format', 'Unsupported document format', status_code=400)
+        try:
+            markdown = await services._convert_document_content(response.content, suffix)
+        except Exception:
+            raise GatewayError('document_conversion_failed', 'Document conversion failed', status_code=502) from None
         if not markdown.strip():
             raise GatewayError('no_document_text', 'No document text was extracted; OCR is not enabled', status_code=502)
         return dict(original_base64=base64.b64encode(response.content).decode('ascii'),
