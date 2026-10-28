@@ -168,7 +168,8 @@ def main():
             raise SystemExit('Gateway token file must be private')
         if backend is None:
             raise SystemExit('Research requires search to be enabled')
-        gateway = GatewayClient(os.environ['MCP_GATEWAY_URL'], token=gateway_path.read_text().strip())
+        gateway = GatewayClient(os.environ['MCP_GATEWAY_URL'], token=gateway_path.read_text().strip(),
+                                socket=os.environ.get('MCP_GATEWAY_SOCKET'))
         async def browser(action, params):
             return await gateway('POST', '/browser', payload={'action': action, 'params': params})
     app = create_app(path.read_text().strip(), host, port, search_backend=backend,

@@ -1,6 +1,6 @@
 """Private storage gateway entry point. Requires isolated worker and explicit auth.
 
-Not wired into the live MCP deployment until integration checks pass.
+Supports internal TCP for the existing deployment or a Unix socket for fresh installs.
 """
 import os
 import re
@@ -58,7 +58,11 @@ def main():
     if not socket or not Path(socket).is_socket():
         raise SystemExit('A running isolated worker socket is required')
     app = create_gateway_app(token, socket)
-    uvicorn.run(app, host='0.0.0.0', port=8000, access_log=False, proxy_headers=False,
+    control_socket = os.environ.get('GATEWAY_SOCKET')
+    if control_socket and not Path(control_socket).is_absolute():
+        raise SystemExit('GATEWAY_SOCKET must be absolute')
+    address = {'uds': control_socket} if control_socket else {'host': '0.0.0.0', 'port': 8000}
+    uvicorn.run(app, **address, access_log=False, proxy_headers=False,
                 limit_concurrency=16, timeout_keep_alive=5)
 
 

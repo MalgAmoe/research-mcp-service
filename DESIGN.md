@@ -14,6 +14,8 @@ Client → bearer-authenticated MCP process
                                                           └─ public HTTP(S)
 ```
 
+Fresh-server configuration (INSTALL.md) carries MCP-to-control HTTP over a private host Unix socket; the existing development deployment uses internal TCP. The socket's host parent is private to the service user and the backend still requires bearer authentication. No control TCP port is published in the fresh-server overlay.
+
 The control gateway requires WORKER_SOCKET; read/conversion/feed failures do not fall back to host fetching. Legacy direct-search/research/safe-read HTTP routes have been removed, and the route allowlist still rejects them. MCP research uses the configured search backend followed by isolated batch reading; missing search configuration fails closed rather than falling back to a legacy route. Document conversion requires worker RPC even when called directly. Shared extraction functions remain in the gateway package for execution inside the isolated worker.
 
 The worker is non-root, read-only, capability-dropped, resource-limited, without storage credentials or storage-network membership. It rejects startup with non-loopback interfaces or prohibited credential environment variables. The control mounts worker RPC read-only; the worker mounts the egress socket read-only. Browser profiles and downloaded working files live in bounded temporary storage, not personal host mounts.
@@ -32,7 +34,7 @@ Main-content extraction remains imperfect. Standard Markdown favors structure; l
 
 ## Data and operations
 
-Redis retains metadata; MinIO retains artifacts. Refresh can update the URL lookup while preserving older content-addressed document IDs. Retention/pinning code remains useful maintenance functionality, not dead code. Cleanup must coordinate writers and preserve pinned/shared artifacts; automatic retention, quotas, backup orchestration and account deletion are not deployed.
+Redis retains metadata; MinIO retains artifacts. Refresh updates URL lookup and may replace content under an existing ID; document IDs are cache handles, not archival guarantees. Retention/pinning code remains useful maintenance functionality, not dead code. Cleanup must coordinate writers and preserve pinned/shared artifacts; automatic retention, quotas, backup orchestration and account deletion are not deployed.
 
 Runtime configuration/secrets, cached evidence and data volumes must survive repository cleanup. The original personal gateway is unrelated to this deployment and must remain untouched. Source provenance is recorded in ORIGIN.md.
 

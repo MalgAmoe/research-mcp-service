@@ -1,7 +1,7 @@
 """Bounded client for this deployment's private gateway; no default endpoint.
 
 This is NOT fetch/browser egress enforcement. Never point it at the personal gateway.
-Deployment wiring stays disabled until independent workers/storage are ready.
+Uses a fixed authenticated HTTP origin, optionally carried over a private Unix socket.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ MAX_ARTIFACT_BYTES = 256 * 1024
 
 
 class GatewayClient:
-    def __init__(self, endpoint: str, *, token: str | None = None, transport=None):
+    def __init__(self, endpoint: str, *, token: str | None = None, transport=None, socket: str | None = None):
         parsed = urlsplit(endpoint)
         if (parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username
                 or parsed.password or parsed.path not in {'', '/'} or parsed.query or parsed.fragment):
@@ -26,6 +26,11 @@ class GatewayClient:
         if token is not None and (len(token) < 32 or not token.isascii() or any(c.isspace() for c in token)):
             raise ValueError('A strong ASCII backend bearer token without whitespace is required')
         self.endpoint = endpoint.rstrip('/')
+        if socket is not None:
+            from pathlib import Path
+            if not Path(socket).is_absolute() or transport is not None:
+                raise ValueError('Use an absolute gateway socket without an injected transport')
+        self.socket = socket
         self.transport = transport
         self.headers = {'Accept-Encoding': 'identity'}
         if token is not None:
@@ -36,7 +41,8 @@ class GatewayClient:
         if not path.startswith('/') or path.startswith('//') or '?' in path or '#' in path:
             raise ValueError('Invalid backend route')
         bound = MAX_ARTIFACT_BYTES if artifact else MAX_RESPONSE_BYTES
-        async with httpx.AsyncClient(base_url=self.endpoint, transport=self.transport,
+        transport = httpx.AsyncHTTPTransport(uds=self.socket) if self.socket else self.transport
+        async with httpx.AsyncClient(base_url=self.endpoint, transport=transport,
                                     trust_env=False, follow_redirects=False, timeout=90,
                                     headers=self.headers) as client:
             async with client.stream(method, path, json=payload, params=params) as response:

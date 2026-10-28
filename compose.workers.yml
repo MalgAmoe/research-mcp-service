@@ -1,4 +1,4 @@
-# Merge with docker-compose.yml. MCP adapters remain disabled until integration checks pass.
+# Merge with docker-compose.yml and compose.control.yml for isolated execution.
 services:
   egress:
     profiles: [workers]

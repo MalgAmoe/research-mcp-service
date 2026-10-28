@@ -1,5 +1,11 @@
 # Private development deployment
 
+## Prepared fresh-server workflow — existing deployment unchanged
+
+INSTALL.md and scripts/setup_server.py provide fresh configuration, instance-scoped image builds/startup, foreground MCP execution, status and optional user-systemd unit generation. Initialization refuses existing configuration; there is no automatic install/enable, migration, cleanup or credential rotation. compose.server.yml uses a private host Unix socket for control, retaining internal storage and network-none execution. The old TCP path remains supported for the current deployment.
+
+111 offline tests pass. Fresh-directory Compose configurations validate; an ephemeral non-root/network-none Docker probe verified authenticated host-to-container Unix socket access. No existing services were restarted or modified. A separate-server cold build and boot-cycle remains unverified. scripts/check_install.py supplies authenticated checks and an optional public-fetch/browser probe without model calls.
+
 ## Prepared description clarifications — not deployed
 
 Removed the undeployed UUID-per-acquisition change, its tests, and the expanded capabilities module/wiring. Cache implementation and capabilities output match deployed fd40a6b again. Document IDs are cache handles, not archives; refresh can replace cached content.

@@ -3,6 +3,7 @@
 Private single-user research service: **34 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale. **Not a public or multi-user production service.**
 
 - [LIVE-STATUS.md](LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
+- [INSTALL.md](INSTALL.md): fresh private-server setup, stable Unix control socket and optional boot service.
 - [DESIGN.md](DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
@@ -43,7 +44,9 @@ uv sync --locked --no-dev
 
 Offline tests exercise the production text-only MCP format, search → batch research orchestration, extraction/presentation regressions, storage maintenance and runtime safety boundaries. Legacy standalone-route tests and the noncompact app mode are removed. Tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
 
-Initial configuration helpers: `scripts/init_mcp.py`, `scripts/init_search.py`, `scripts/init_storage.py`. They refuse to overwrite existing configuration. Full runtime setup additionally requires a private random `GATEWAY_TOKEN` in `.env.control` and the matching mode-0600 `.secrets/gateway-token`. Never copy credentials from another service. See LIVE-STATUS for the existing deployment rather than rerunning initialization.
+For a fresh server, use `scripts/setup_server.py` as described in INSTALL.md; it creates the complete configuration and keeps the control endpoint stable across container recreation. Do not run it over the existing development configuration.
+
+Older component-level configuration helpers: `scripts/init_mcp.py`, `scripts/init_search.py`, `scripts/init_storage.py`. They refuse to overwrite existing configuration. Full runtime setup additionally requires a private random `GATEWAY_TOKEN` in `.env.control` and the matching mode-0600 `.secrets/gateway-token`. Never copy credentials from another service. See LIVE-STATUS for the existing deployment rather than rerunning initialization.
 
 MCP startup:
 
