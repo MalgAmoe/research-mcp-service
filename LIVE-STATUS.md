@@ -1,24 +1,34 @@
 # Private development deployment
 
-## Prepared retention integration — no deletion or scheduling enabled
+## Deployed release 283b6f2 — no deletion or scheduling enabled
+
+Control/worker source layers and host MCP were updated after matching dependency manifest/lock hashes against the prior images. Rollback images end in pre-283b6f2. This deployment retains its internal TCP control connection; it was not migrated to the fresh-server socket overlay or a boot service.
+
+119 offline tests pass. All live probes passed: 34 tools, search → acquisition, page storage/retrieval, heading lookup, artifact/RSS-preview fields, Chromium navigation and text/element waits, screenshot-limit fallback, unsupported-format errors and 58 NASA PDF links. Deployed retention completed a dry run (55 documents, 5 RSS entries, 110 artifacts / 17,471,745 bytes; zero eligible deletions). The host guard refused running control, and the deployed container refused unguarded apply before storage access. No destructive apply, pin change or automatic cleanup was performed. Probe browser sessions were closed.
+
+Logs: .state/deploy-283b6f2.log, .state/check-283b6f2.log, .state/tests-deploy-283b6f2.log. Current source snapshots:
+- MCP/worker: sha256:4dd49625eb19f45cb51a3ba89938a044aa8e3f384513cc07691999f44989b464
+- Control: sha256:b30c27a23c9b6928b4d3bbfe139ad6f22893552b5598015889db26be9fd63b11
+
+### Retention integration
 
 scripts/retention.py runs the existing retention engine inside a temporary control-image process against this project's storage. It supports development and fresh-server Compose layouts and strips shell project/config overrides. Dry run remains the default; pin operations are explicit. Apply requires an updated control image plus --writers-stopped, refuses absent/non-exited control, and rechecks stopped state after acquiring the maintenance lock. Apply failure after deletion begins retains the lock for explicit recovery; successful completion releases it. No automatic service stopping/restarting or unlocking is added.
 
-119 offline tests pass, including current-state refusal, one-off-container handling, both layouts, locked handshake refusal/success and failure-lock retention. A live read-only control check correctly refused the running service. The host launcher successfully ran the unchanged inventory code in the existing image: 55 documents, 5 RSS entries, 110 objects / 17,471,745 artifact bytes and 1,816,088 Redis used-memory bytes; zero deletion candidates at 30/90 days. Logs: .state/retention-dry-run.log and .state/tests-retention-host.log. No data was deleted, pin changed or service restarted. The new apply protocol is not deployed or exercised against real data.
+119 offline tests pass, including current-state refusal, one-off-container handling, both layouts, locked handshake refusal/success and failure-lock retention. A live read-only control check correctly refused the running service. The host launcher successfully ran the unchanged inventory code in the existing image: 55 documents, 5 RSS entries, 110 objects / 17,471,745 artifact bytes and 1,816,088 Redis used-memory bytes; zero deletion candidates at 30/90 days. Logs: .state/retention-dry-run.log and .state/tests-retention-host.log. These preparation checks did not delete data, change pins or restart services. The apply protocol is now deployed; its refusal checks were exercised live, but destructive execution against real data was not.
 
-## Prepared fresh-server workflow — existing deployment unchanged
+## Fresh-server workflow — available, not adopted by this deployment
 
 INSTALL.md and scripts/setup_server.py provide fresh configuration, instance-scoped image builds/startup, foreground MCP execution, status and optional user-systemd unit generation. Initialization refuses existing configuration; there is no automatic install/enable, migration, cleanup or credential rotation. compose.server.yml uses a private host Unix socket for control, retaining internal storage and network-none execution. The old TCP path remains supported for the current deployment.
 
-111 offline tests pass. Fresh-directory Compose configurations validate; an ephemeral non-root/network-none Docker probe verified authenticated host-to-container Unix socket access. No existing services were restarted or modified. A separate-server cold build and boot-cycle remains unverified. scripts/check_install.py supplies authenticated checks and an optional public-fetch/browser probe without model calls.
+The initial workflow passed 111 offline tests. Fresh-directory Compose configurations validate; an ephemeral non-root/network-none Docker probe verified authenticated host-to-container Unix socket access. Those preparation checks did not alter existing services. A separate-server cold build and boot-cycle remains unverified. scripts/check_install.py supplies authenticated checks and an optional public-fetch/browser probe without model calls.
 
-## Prepared description clarifications — not deployed
+## Deployed description clarifications
 
 Removed the undeployed UUID-per-acquisition change, its tests, and the expanded capabilities module/wiring. Cache implementation and capabilities output match deployed fd40a6b again. Document IDs are cache handles, not archives; refresh can replace cached content.
 
-Retained brief workflow, reading/conversion, extraction-limit, browser timing/lifecycle/keyboard and RSS-side-effect descriptions. RSS force_refresh remains a compatibility no-op. No new storage policy or runtime feature is introduced. No deployment, cache migration or data deletion performed.
+Retained brief workflow, reading/conversion, extraction-limit, browser timing/lifecycle/keyboard and RSS-side-effect descriptions. RSS force_refresh remains a compatibility no-op. No new storage policy is introduced. These descriptions are now deployed; no cache migration or data deletion was performed.
 
-## Deployed cleanup release fd40a6b
+## Previous deployment fd40a6b
 
 Removed obsolete standalone safe-reader/DNS code and direct search/research HTTP routes, their request/response models, the unused render_js option and queued-job status scaffold. Batch responses still report status=done. Removed the direct-HTTP document-conversion fallback and the unimplemented structured strategy placeholder. Production extraction and egress remain intact.
 
@@ -28,7 +38,7 @@ Control/worker source layers and the host MCP process have been updated. Depende
 
 Live checks passed: 34 tools, single text representation, search → acquired Python documentation, obsolete-route rejection, heading index, artifact/preview metadata, browser history and condition waits, screenshot-limit observation preservation, unsupported-format errors and 58 NASA PDF annotation links. The first browser-open probe returned browser_reset; no browser processes remained. A separate retry passed the full browser/conversion probe without another service restart. The original failure is preserved in .state/check-fd40a6b.log; its cause is not established.
 
-Deployment/check logs: .state/deploy-fd40a6b.log, .state/check-cleanup-fd40a6b.log, .state/check-fd40a6b-retry.log. Current source snapshots:
+Deployment/check logs: .state/deploy-fd40a6b.log, .state/check-cleanup-fd40a6b.log, .state/check-fd40a6b-retry.log. Previous source snapshots:
 - MCP/worker: sha256:a608d7400499422cbee602aa1be7fa26cb3fc1f89585e44c721ac5abd3da2d40
 - Control: sha256:7368f3b1b08a74ad25fef69cdcb14179925d1155948aacc4700ae9cbff15784e
 
