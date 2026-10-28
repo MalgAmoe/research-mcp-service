@@ -40,6 +40,7 @@ class ResearchDepth(StrEnum):
 
 
 class JobStatus(StrEnum):
+    # Shared acquisition-response enum; no background job queue is implemented.
     queued = "queued"
     running = "running"
     done = "done"
@@ -280,20 +281,3 @@ class RssFetchResponse(BaseModel):
     feed: RssFeed
     entries: list[RssFeedEntry]
     new_entries: int = 0
-
-
-class JobProgress(BaseModel):
-    queued: int = 0
-    processed: int = 0
-    failed: int = 0
-
-
-class Job(BaseModel):
-    job_id: str
-    type: str
-    status: JobStatus
-    created_at: datetime
-    updated_at: datetime
-    progress: JobProgress = Field(default_factory=JobProgress)
-    result: dict[str, Any] | None = None
-    error: str | None = None

@@ -2,30 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Protocol
 
 from minio import Minio
 from redis.asyncio import Redis
 
 from .config import settings
-from .models import Document, Job, RssFeed, RssFeedEntry
-
-
-class Store(Protocol):
-    async def get_by_url(self, url: str) -> Document | None: ...
-    async def save_document(self, doc: Document) -> Document: ...
-    async def get_document(self, doc_id: str) -> Document | None: ...
-    async def list_recent_documents(self, limit: int = 20) -> list[Document]: ...
-    async def get_job(self, job_id: str) -> Job | None: ...
-    # RSS
-    async def save_rss_feed(self, key: str, feed: RssFeed) -> None: ...
-    async def get_rss_feed(self, key: str) -> RssFeed | None: ...
-    async def list_rss_feeds(self) -> list[RssFeed]: ...
-    async def save_rss_entry(self, feed_key: str, entry: RssFeedEntry) -> None: ...
-    async def get_rss_entry(self, entry_id: str) -> RssFeedEntry | None: ...
-    async def get_rss_entry_ids(self, feed_key: str) -> list[str]: ...
-    async def list_rss_entries(self, feed_key: str, limit: int = 50, include_read: bool = False) -> list[RssFeedEntry]: ...
-    async def update_rss_entry_read(self, entry_id: str, is_read: bool) -> RssFeedEntry | None: ...
+from .models import Document, RssFeed, RssFeedEntry
 
 
 class RedisStore:
@@ -67,12 +49,6 @@ class RedisStore:
             if doc:
                 docs.append(doc)
         return docs
-
-    async def get_job(self, job_id: str) -> Job | None:
-        raw = await self.redis.get(f"job:{job_id}")
-        if not raw:
-            return None
-        return Job.model_validate_json(raw)
 
     # ── RSS ──────────────────────────────────────────────────────────────────
 

@@ -24,10 +24,8 @@ from .models import (
     ConvertDocumentRequest,
     ConvertedDocument,
     Document,
-    DocumentStrategy,
     DocumentMetadata,
     ExtractionAttempt,
-    Job,
     PublicReadRequest,
     PublicReadResponse,
     ReadStrategy,
@@ -39,7 +37,6 @@ from .models import (
     ResourceType,
     RssFeed,
     RssFeedEntry,
-    RssFetchRequest,
     RssFetchResponse,
     SearchResult,
     SearchAttempt,
@@ -1247,10 +1244,6 @@ async def list_recent_documents(limit: int = 20, include_markdown: bool = False)
                 hydrated.append(doc)
         return hydrated
     return [doc.model_copy(update={"markdown": None}) for doc in docs]
-
-
-async def get_job(job_id: str) -> Job | None:
-    return await redis_store.get_job(job_id)
 
 
 # ── RSS helpers ────────────────────────────────────────────────────────────

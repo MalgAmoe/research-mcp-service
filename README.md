@@ -1,148 +1,56 @@
 # Research MCP Service
 
-A new, self-contained project for a hosted research tool service used by a small, approved group, with private environments for each person.
+Private single-user research service: **31 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale. **Not a public or multi-user production service.**
 
-**Status: private single-user authenticated MCP prototype with `health` and opt-in `search`. No multi-user routing, page-reading or browser tools are exposed yet. Do not expose this application publicly.**
+- [LIVE-STATUS.md](LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
+- [DESIGN.md](DESIGN.md): runtime boundaries and remaining security work.
+- [ORIGIN.md](ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
-## Boundaries
+## Runtime
 
-- This repository owns its code. It does not import, mount, symlink, or execute code from the original personal tool project.
-- Dependencies are ordinary third-party packages declared in `pyproject.toml` and resolved in `uv.lock`.
-- No personal credentials, caches, databases, browser profiles, agent configurations, or Git history were copied.
-- The original project and its running services are not part of this deployment.
-- Nothing is provisioned or started automatically by cloning/installing this project.
+| Component | Source / deployment |
+| --- | --- |
+| Host MCP process | `src/research_mcp_service/server.py`, `.env.mcp` |
+| Dedicated search | `compose.search.yml`, `.env.search`, loopback port 18080 |
+| Private Redis/MinIO | `docker-compose.yml`, `.env.runtime` |
+| Network-isolated execution and egress proxy | `compose.workers.yml`, `Dockerfile.worker`, `Dockerfile.egress` |
+| Authenticated storage/control gateway | `compose.control.yml`, `Dockerfile.control`, `.env.control` |
 
-See [DESIGN.md](DESIGN.md) for the security model, first implementation steps, and release gates. See [ORIGIN.md](ORIGIN.md) for the copied source revision and license attribution.
+The base Compose file starts storage only. The old all-in-one gateway/engine profile and its Dockerfile have been removed. Do not recreate that topology: browsers must not receive storage credentials or join the storage network.
 
-## Included today
+## Tools and behavior
 
-- Research engine: search, page reading, document conversion, storage and RSS.
-- Chromium/Camoufox interactive controller source, not yet exposed remotely.
-- Cache retention/pinning implementation; service-side maintenance orchestration is still to be designed.
-- Offline tests for the copied engine and repository isolation boundaries.
-- A locked Python environment, Docker build, and a private per-user backend Compose skeleton.
+- Search: explicit SearXNG/DDGS provider, automatic fallback, domains, page, freshness and language; optional diagnostics. Upstream pagination may overlap; language/freshness are not guarantees and missing publication dates are not inferred from snippets.
+- Reading: `light` HTTP/Trafilatura; `standard` Chromium/structured Markdown; `browser` Chromium or Camoufox; `auto` fallback. Stealth requires `strategy=browser` and `browser_profile=stealth`; it does not guarantee access past blocking.
+- Documents: PDF, DOCX, PPTX, TXT, Markdown and HTML text conversion; saved originals and extracted text. Text extraction is not complete document/layout understanding.
+- Retrieval: bounded cached passages, continuation offsets, and `web_document_find` by literal phrase or ATX Markdown heading. Original evidence remains unchanged.
+- Batch/research: compact source summaries and separate failures. Full text is retrieved separately, even if an older client requests full Markdown in a batch.
+- RSS: preview, subscribe/list, fetch, cached entries and read-state updates. Unsubscribe is not implemented.
+- Browser: open/observe/navigate/click/type/press/scroll/wait/text/find/close/list, with native image screenshots. Four ephemeral sessions per owner worker; failures/restarts can expire them.
 
-## Private MCP connectivity test
+Live MCP uses one text representation, not duplicate text/structured JSON. Documents default to 12,000-character passages, at most 30,000 per retrieval. Backend JSON is limited to 2 MiB; passage lookup currently retrieves the whole cached document before slicing, so this ceiling still applies. Inline artifacts are limited to 256 KiB; screenshots to 1 MiB. Batches accept 15 URLs and a concurrency argument of 1–10; actual isolated fetch execution has two slots. These are limits, not throughput promises.
 
-Uses the official Python MCP SDK, pinned to `mcp==2.3.0`, with Streamable HTTP at `/mcp`. No OAuth or extra custom headers are needed for this single-user test.
+## Development and operations
 
-```bash
+```sh
 uv sync --locked --no-dev
-# Use this machine's Tailscale IPv4 address, or leave --host out for loopback.
-python3 scripts/init_mcp.py --host 100.x.y.z --port 8766
+.venv/bin/python -m unittest discover -s tests -q
+```
+
+Offline tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
+
+Initial configuration helpers: `scripts/init_mcp.py`, `scripts/init_search.py`, `scripts/init_storage.py`. They refuse to overwrite existing configuration. Full runtime setup additionally requires a private random `GATEWAY_TOKEN` in `.env.control` and the matching mode-0600 `.secrets/gateway-token`. Never copy credentials from another service. See LIVE-STATUS for the existing deployment rather than rerunning initialization.
+
+MCP startup:
+
+```sh
 uv run --locked --env-file .env.mcp python -m research_mcp_service.server
 ```
 
-Replace `100.x.y.z` with the real address. Setup creates a random token in `.secrets/mcp-token` and private `.env.mcp`; both are Git-ignored and excluded from Docker context. Setup will not overwrite an existing configuration. The endpoint process requires a private token file and refuses wildcard/public-IP binds. It starts in health-only mode unless search is explicitly enabled below. It never starts backend containers itself.
+Clients use the configured Tailnet URL and `Authorization: Bearer <token>` in protected client settings. No OAuth/public deployment yet. Reconnect clients after schema changes. `health` checks MCP connectivity, not backend health. The MCP process is manually managed with `.state/mcp.pid` / `.state/mcp.log`, not installed as a boot service.
 
-In an MCP client that can directly reach this host over Tailscale:
-
-- Transport: **Streamable HTTP**.
-- URL: `http://YOUR_TAILSCALE_IP:8766/mcp`.
-- Bearer-token environment variable: `RESEARCH_MCP_TOKEN`.
-- Set that variable on the **client machine** to the contents of the server's private token file, via a secure transfer. Supply the raw token, not the `Bearer ` prefix. Do not paste secrets into chat or commit them.
-- No extra headers. If the client lacks a bearer-token setting, use `Authorization: Bearer <token>` through its protected configuration instead.
-
-A macOS app launched from Finder may not inherit variables exported in a terminal. Ensure the client process actually receives `RESEARCH_MCP_TOKEN`; exporting it only on the server does not configure the client.
-
-HTTP here relies on Tailscale's encrypted network path; it is not a public HTTPS deployment. Tailscale ACLs must allow the client to reach the selected port. A hosted connector running outside the Tailnet cannot use this private URL merely because its UI is on your Mac.
-
-The `health` tool reports MCP connectivity and whether search is enabled, **not** search-provider health. Missing/invalid tokens receive 401; Host/Origin checks stay enabled; requests are limited to 64 KiB and 32 concurrent connections. Stateless transport avoids shared mutable MCP sessions at this stage. No browser/storage state or user routing is exposed. Run it in the foreground for development, or manage it explicitly with a PID/log; no boot service is installed. Rotate the token by replacing the private file and restarting the process.
-
-## Enable independent web search
-
-Only a dedicated SearXNG container is needed for this stage—no Redis, MinIO, browser worker, or existing personal gateway. The copied search implementation is maintained in this repository. In `auto` mode it uses this project's SearXNG instance first, then DDGS on an error or zero usable results. Usable `degraded` SearXNG results do not trigger fallback.
-
-```bash
-python3 scripts/init_search.py
-# Starts this project's search-only stack on loopback port 18080.
-docker compose --env-file .env.search -f compose.search.yml up -d --wait
-```
-
-Add these non-secret settings to the private `.env.mcp`, then restart the MCP process:
-
-```dotenv
-MCP_ENABLE_SEARCH=true
-SEARXNG_URL=http://127.0.0.1:18080
-```
-
-`init_search.py` creates a mode-0600 `.env.search` with a fresh SearXNG secret; it refuses to overwrite an existing file. `--port` can select a different free loopback port; keep `SEARXNG_URL` in sync. The default Compose project name is `research-mcp-search-dev`, with its own network, no persistent volumes, and no reference to another application's services. Do not override its project name to an existing stack. This is a single-user development setup, not automated tenant provisioning.
-
-Search parameters:
-
-| Parameter | Values |
-| --- | --- |
-| `query` | 1–2,000 characters |
-| `limit` | 1–50; default 5 |
-| `freshness` | `any`, `day`, `week`, `month`, `year` |
-| `page` | 1–10 |
-| `language` | Optional language tag, e.g. `en` or `fr-FR` |
-| `include_domains`, `exclude_domains` | Up to 10 plain domains each; normalized and validated |
-| `provider` | `auto` (default), `searxng`, or `ddgs` |
-| `diagnostics` | `false` (default); set `true` for troubleshooting |
-
-Domain filters match the specified host and its subdomains, not similarly named domains. Multiple included domains are OR alternatives; exclusions take precedence. Filtering is also enforced on returned results. Unlike the original copied implementation, this avoids requiring a result to satisfy several independent `site:` restrictions.
-
-Normal responses show the query, results with sources and returned count. Successful searches are not labelled `degraded`. A short note identifies fallback use, and empty/failed searches have distinct plain-language messages. Material limitations (such as language not being enforced or output being shortened) remain visible.
-
-Set `diagnostics=true` to include a nested `diagnostics` object with provider/status, engine failures and ordered `attempts` history—including a failed primary when fallback succeeds. Per-result engine metadata is also included in this mode. Internal `degraded` status describes partial engine availability, not result quality. DDGS engine provenance is unavailable, so its `engines` arrays are empty rather than claiming configured backends all produced each result.
-
-This is general web search; a news-search mode is deliberately not supported. Freshness, pagination and language depend on upstream support. Pages can overlap or change between calls; there is no cross-page/session deduplication guarantee. Publication dates are returned only when supplied as parseable upstream metadata; dates mentioned in snippets are not assumed to be publication dates. In particular, DDGS uses the configured region (`DDGS_REGION`, default `us-en`); the language parameter is not independently enforced there. Results can be fewer than requested after filtering or upstream limits. There is no relevance reranker or claim of guaranteed search accuracy.
-
-Typical snippets are retained; exceptional titles/snippets are capped at 500/4,000 characters, and the response is bounded to about 500 KB. The returned count and a plain-language note make limits visible by default; diagnostic mode also exposes `truncation` and `requested_limit`. Unsupported or oversized URLs are omitted, never silently shortened into broken links. Returned text is untrusted; queries are sent to external engines, so do not submit secrets. Search does not fetch result pages or save them to storage.
-
-At most two searches execute concurrently in this single MCP process; additional calls receive a retryable busy tool error rather than queueing indefinitely. Each call has a 60-second overall deadline including startup, primary and fallback. Provider calls run in a short-lived process; timeouts and cancellations kill/reap it before releasing capacity, including DDGS's blocking thread workers. This uses Linux process groups and adds small per-call startup overhead. Provider errors are reported without internal URLs or exception details. Restart/reconnect or refresh tools in the client after enabling search. This does not rotate the MCP token or change its URL.
-
-```bash
-# Inspect/stop only this project's search backend:
-docker compose --env-file .env.search -f compose.search.yml ps
-docker compose --env-file .env.search -f compose.search.yml stop
-```
-
-The container restarts with Docker (`unless-stopped`); the host MCP development process still has no boot service. Stopping SearXNG while leaving MCP running makes `auto` searches try DDGS; explicit `searxng` searches report unavailable. `health` remains available.
-
-## Tool-port implementation (not yet enabled on the live endpoint)
-
-The MCP adapter layer now covers the remaining personal web tool surface without using the personal deployment:
-
-| Group | Tools implemented as MCP adapters |
-| --- | --- |
-| Web | `web_capabilities`, `web_read`, `web_batch_fetch`, `web_research` |
-| Documents | `web_convert_document`, `web_document`, `web_recent_documents`, `web_artifact` |
-| RSS | `rss_preview`, `rss_subscribe`, `rss_list`, `rss_fetch`, `rss_entries`, `rss_read`, `rss_mark_read` |
-| Browser | `browser_open`, `browser_observe`, `browser_goto`, `browser_click`, `browser_type`, `browser_press`, `browser_scroll`, `browser_wait`, `browser_text`, `browser_find`, `browser_close`, `browser_close_all`, `browser_sessions` |
-
-These 28 adapters are registered only when `create_app()` receives explicit gateway/browser backends. **The production entry point does not wire them or provide an environment switch to enable them yet.** The live Mac endpoint remains `health` + `search`; reconnecting cannot enable tools that have not been deployed.
-
-- `gateway.py` provides a fixed-origin HTTP client with no environment proxy inheritance or redirect following. It does not implement URL-fetch egress protection.
-- Gateway tools share two admission slots and a 90-second client deadline. Browser actions share one slot and a 45-second deadline. Cancellation releases adapter capacity; it does **not** prove that a remote worker has stopped. Worker-side deadlines/admission/cleanup remain mandatory.
-- Backend JSON transfers are capped at 2 MiB. Inline artifacts are capped at 256 KiB (UTF-8 text or base64 binary); larger artifacts are explicitly refused. Authenticated large-artifact transfer remains to be implemented.
-- Document responses expose artifact availability rather than private storage URIs. Backend exceptions and known extraction/feed failure fields are sanitized.
-- Browser screenshots become native MCP image content, not base64 text inside document JSON. Sessions are intended to belong to a separate owner-scoped worker; worker ownership/expiry is not proven by these adapter tests.
-- Browser inputs are bounded; refs cannot inject CSS selectors. Only headless opening is offered. Unsupported Camoufox timezone overrides are rejected, rather than silently ignored.
-- Only the implemented `text` document conversion strategy is exposed. The copied gateway's reserved `structured` setting is not advertised as working conversion.
-
-All 65 offline tests pass, including all routes, full tool discovery (30 with health/search), authentication, validation, busy/timeout/cancellation behavior, native screenshots and transfer bounds. These tests use fake backends; **live reading, storage, RSS and browser integration has not yet been verified through MCP.**
-
-Next: provision this project's own storage; isolate fetching/browser execution and enforce egress; connect the adapters; verify real end-to-end calls before refreshing the Mac client. Do not point the adapter at the personal gateway or import the host browser controller into the MCP entry point.
-
-## Local development checks
-
-Python 3.12+ and `uv`:
-
-```bash
-uv sync --locked --no-dev
-uv run python -m unittest discover -s tests -v
-```
-
-These tests include in-process MCP initialization, tool discovery/calls, bearer authentication and HTTP security checks. They do not start Redis, MinIO, SearXNG, browsers, listening sockets, or live model/API calls. Browser binaries are not needed for the offline tests. The Docker build installs Chromium and Camoufox explicitly; do not install extra browsers on the host unless developing the standalone controller.
-
-The full `docker-compose.yml` (distinct from the search-only `compose.search.yml`) describes ONE private user's future backend, not the shared MCP entry point. It publishes no host ports. It requires an administrator-provided tenant ID and unique storage/SearXNG secrets. See `.env.example`; do not reuse credentials from another deployment. The `.env` file is not created by installation.
-
-Different `TENANT_ID` values produce distinct Compose project networks and data volumes when managed from separate tenant configuration directories. Do not override `COMPOSE_PROJECT_NAME` or use `docker compose -p` to point at an existing deployment. Automated provisioning, safe tenant-ID validation, and HTTP access are not implemented yet.
-
-**A separate Compose network is not sufficient protection against malicious URLs or a compromised browser. Network egress enforcement and browser isolation are public-deployment blockers.**
+Preserve `.env*`, `.secrets/`, `.state/` evidence and Docker data volumes. Never print secrets or use `docker compose down -v` as cleanup. Retention code is retained for deliberate administrator maintenance; no automatic retention is enabled. Do not restart workers while users are testing without coordinating the interruption.
 
 ## License
 
-[MIT](LICENSE). Copied notices are retained. Third-party dependencies retain their own licenses.
+[MIT](LICENSE). Third-party dependencies retain their own licenses.

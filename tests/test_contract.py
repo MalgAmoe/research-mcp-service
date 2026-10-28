@@ -18,6 +18,9 @@ class ContractTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(path, paths)
 
+    def test_unimplemented_job_queue_route_removed(self):
+        self.assertNotIn('/jobs/{job_id}', app.openapi()['paths'])
+
     def test_search_defaults(self):
         request = SearchWebRequest(query="Python")
         self.assertEqual(request.category, "general")

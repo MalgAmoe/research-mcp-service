@@ -11,7 +11,6 @@ from .models import (
     ConvertDocumentRequest,
     ConvertedDocument,
     Document,
-    Job,
     PublicReadRequest,
     PublicReadResponse,
     ReadUrlRequest,
@@ -31,7 +30,6 @@ from .services import (
     batch_fetch,
     convert_document,
     get_document,
-    get_job,
     list_recent_documents,
     read_public_result,
     read_url,
@@ -179,14 +177,6 @@ async def api_convert_document(req: ConvertDocumentRequest) -> ConvertedDocument
             status_code=500,
             detail={"code": "internal_error", "message": "Unexpected convert_document failure"},
         ) from exc
-
-
-@app.get("/jobs/{job_id}", response_model=Job)
-async def api_get_job(job_id: str) -> Job:
-    job = await get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="job not found")
-    return job
 
 
 @app.get("/documents/recent", response_model=list[Document])

@@ -1,6 +1,4 @@
-# ONE private person's backend, NOT a publicly deployable MCP service.
-# Default startup is storage-only. The engine profile remains undeployed/unsafe for remote fetching.
-# No published ports; authentication, MCP ingress and fetch-worker egress enforcement are TODO.
+# Independent private storage. Add compose.workers.yml and compose.control.yml for execution.
 name: research-mcp-${TENANT_ID:?Set a unique TENANT_ID in this project configuration}
 
 x-logging: &logging
@@ -46,65 +44,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-
-  gateway:
-    profiles: [engine]
-    networks: [default, storage]
-    build: .
-    image: research-mcp-service-backend:dev
-    logging: *logging
-    mem_limit: 4g
-    cpus: 2
-    pids_limit: 512
-    init: true
-    restart: unless-stopped
-    environment:
-      SEARXNG_URL: http://searxng:8080
-      SEARCH_PROVIDER: ${SEARCH_PROVIDER:-auto}
-      DDGS_BACKEND: ${DDGS_BACKEND:-duckduckgo,yahoo}
-      DDGS_REGION: ${DDGS_REGION:-us-en}
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set unique MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set unique MINIO_SECRET_KEY}
-      MINIO_SECURE: "false"
-      MINIO_BUCKET_RAW: web-raw
-      MINIO_BUCKET_PROCESSED: web-processed
-      MINIO_BUCKET_DOCUMENTS: web-documents
-    depends_on:
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      searxng:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  searxng:
-    profiles: [engine]
-    image: searxng/searxng@sha256:23482d8ecf7ddf66029479468ea04c1bb11d2b65785a17a7e629e2ffd13296ca
-    logging: *logging
-    mem_limit: 1g
-    cpus: 2
-    pids_limit: 256
-    restart: unless-stopped
-    environment:
-      SEARXNG_BASE_URL: http://searxng:8080/
-      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set unique SEARXNG_SECRET}
-    volumes:
-      - ./infra/searxng-primary.yml:/etc/searxng/settings.yml:ro
-    depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
 
 networks:
   storage:
