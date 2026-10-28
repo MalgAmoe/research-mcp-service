@@ -2,7 +2,7 @@
 
 A new, self-contained project for a hosted research tool service used by a small, approved group, with private environments for each person.
 
-**Status: project skeleton and copied research engine. There is no MCP endpoint or user authentication yet. Do not expose this application publicly.**
+**Status: single-user authenticated MCP connectivity prototype plus copied research engine. Only the MCP `health` tool is exposed. No multi-user routing or research tools are connected yet. Do not expose this application publicly.**
 
 ## Boundaries
 
@@ -22,6 +22,33 @@ See [DESIGN.md](DESIGN.md) for the security model, first implementation steps, a
 - Offline tests for the copied engine and repository isolation boundaries.
 - A locked Python environment, Docker build, and a private per-user backend Compose skeleton.
 
+## Private MCP connectivity test
+
+Uses the official Python MCP SDK, pinned to `mcp==2.3.0`, with Streamable HTTP at `/mcp`. No OAuth or extra custom headers are needed for this single-user test.
+
+```bash
+uv sync --locked --no-dev
+# Use this machine's Tailscale IPv4 address, or leave --host out for loopback.
+python3 scripts/init_mcp.py --host 100.x.y.z --port 8766
+uv run --locked --env-file .env.mcp python -m research_mcp_service.server
+```
+
+Replace `100.x.y.z` with the real address. Setup creates a random token in `.secrets/mcp-token` and private `.env.mcp`; both are Git-ignored and excluded from Docker context. Setup will not overwrite an existing configuration. The endpoint process requires a private token file and refuses wildcard/public-IP binds. It does not start or access the research backend stack.
+
+In an MCP client that can directly reach this host over Tailscale:
+
+- Transport: **Streamable HTTP**.
+- URL: `http://YOUR_TAILSCALE_IP:8766/mcp`.
+- Bearer-token environment variable: `RESEARCH_MCP_TOKEN`.
+- Set that variable on the **client machine** to the contents of the server's private token file, via a secure transfer. Supply the raw token, not the `Bearer ` prefix. Do not paste secrets into chat or commit them.
+- No extra headers. If the client lacks a bearer-token setting, use `Authorization: Bearer <token>` through its protected configuration instead.
+
+A macOS app launched from Finder may not inherit variables exported in a terminal. Ensure the client process actually receives `RESEARCH_MCP_TOKEN`; exporting it only on the server does not configure the client.
+
+HTTP here relies on Tailscale's encrypted network path; it is not a public HTTPS deployment. Tailscale ACLs must allow the client to reach the selected port. A hosted connector running outside the Tailnet cannot use this private URL merely because its UI is on your Mac.
+
+The sole `health` tool reports MCP connectivity, **not** research backend health. Missing/invalid tokens receive 401; Host/Origin checks stay enabled; requests are limited to 64 KiB and 32 concurrent connections. Stateless transport avoids shared mutable MCP sessions at this stage. No browser/storage state or user routing is exposed. Run it in the foreground for development, or manage it explicitly with a PID/log; no boot service is installed. Rotate the token by replacing the private file and restarting the process.
+
 ## Local development checks
 
 Python 3.12+ and `uv`:
@@ -31,7 +58,7 @@ uv sync --locked --no-dev
 uv run python -m unittest discover -s tests -v
 ```
 
-These tests do not start Redis, MinIO, SearXNG, browsers, or live model/API calls. Browser binaries are not needed for the offline tests. The Docker build installs Chromium and Camoufox explicitly; do not install extra browsers on the host unless developing the standalone controller.
+These tests include in-process MCP initialization, tool discovery/calls, bearer authentication and HTTP security checks. They do not start Redis, MinIO, SearXNG, browsers, listening sockets, or live model/API calls. Browser binaries are not needed for the offline tests. The Docker build installs Chromium and Camoufox explicitly; do not install extra browsers on the host unless developing the standalone controller.
 
 The Compose file describes ONE private user's backend, not the shared MCP entry point. It publishes no host ports. It requires an administrator-provided tenant ID and unique storage/SearXNG secrets. See `.env.example`; do not reuse credentials from another deployment. The `.env` file is not created by installation.
 

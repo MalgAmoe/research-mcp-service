@@ -10,5 +10,7 @@ __pycache__/
 .env.*
 !.env.example
 backups/
+.secrets/
+.state/
 *.tar
 project-path.txt

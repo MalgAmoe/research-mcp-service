@@ -1,0 +1,1 @@
+"""Independent authenticated MCP interface."""

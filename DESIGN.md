@@ -19,7 +19,9 @@ MCP adapter + identity-to-environment routing
         +-- person B: research engine + Redis + MinIO + SearXNG + browser worker
 ```
 
-Use Streamable HTTP for MCP. Select and pin an official SDK after checking its current transport/authentication documentation. No SDK or placeholder MCP server is added until that choice is verified.
+Use Streamable HTTP for MCP. The initial connectivity prototype uses the official Python SDK `mcp==2.3.0`, checked against its installed API and official SDK documentation. It exposes only `health`, requires a pre-shared bearer token on every HTTP request and binds only to loopback or a Tailscale IPv4 address. This is a single-user test, not the production multi-user authentication design.
+
+References: https://github.com/modelcontextprotocol/python-sdk and https://py.sdk.modelcontextprotocol.io/get-started/ .
 
 For the first implementation, prefer separate MCP processes per environment if that reduces the security-critical routing surface. A shared authenticated ingress may route to them. Regardless of process layout, authenticated server-side identity determines the environment: a client-supplied tenant ID is never authority.
 
@@ -77,4 +79,4 @@ Add per-person storage accounting and a defined quota-exceeded response. Pins an
 
 ## Not yet implemented
 
-MCP adapter, authentication, tenant provisioning/routing, remotely owned browser sessions, enforced egress, global admission controls, quotas, hosted maintenance, production deployment. The current Compose file is only a private backend skeleton.
+Research-tool MCP adapter, multi-user authentication and provisioning/routing, remotely owned browser sessions, enforced egress, aggregate user quotas, hosted maintenance, production deployment. The current Compose file remains only a private backend skeleton. The separate single-user MCP entry point has bearer authentication and basic HTTP limits, but does not connect to those backends.
