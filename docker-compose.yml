@@ -1,0 +1,105 @@
+# ONE private person's backend, NOT a publicly deployable MCP service.
+# No published ports; authentication, MCP ingress and egress enforcement are TODO.
+name: research-mcp-${TENANT_ID:?Set a unique TENANT_ID in this project configuration}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  redis:
+    image: redis@sha256:b9646e7cdf8165d985b88bb3e61b3f2f7625db7f6c98af79def91997d04f26b9
+    logging: *logging
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    logging: *logging
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?Set unique MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?Set unique MINIO_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  gateway:
+    build: .
+    image: research-mcp-service-backend:dev
+    logging: *logging
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 512
+    init: true
+    restart: unless-stopped
+    environment:
+      SEARXNG_URL: http://searxng:8080
+      SEARCH_PROVIDER: ${SEARCH_PROVIDER:-auto}
+      DDGS_BACKEND: ${DDGS_BACKEND:-duckduckgo,yahoo}
+      DDGS_REGION: ${DDGS_REGION:-us-en}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set unique MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set unique MINIO_SECRET_KEY}
+      MINIO_SECURE: "false"
+      MINIO_BUCKET_RAW: web-raw
+      MINIO_BUCKET_PROCESSED: web-processed
+      MINIO_BUCKET_DOCUMENTS: web-documents
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      searxng:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  searxng:
+    image: searxng/searxng@sha256:23482d8ecf7ddf66029479468ea04c1bb11d2b65785a17a7e629e2ffd13296ca
+    logging: *logging
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    restart: unless-stopped
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set unique SEARXNG_SECRET}
+    volumes:
+      - ./infra/searxng-primary.yml:/etc/searxng/settings.yml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redis_data:
+  minio_data:

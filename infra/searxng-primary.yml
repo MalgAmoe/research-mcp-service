@@ -1,0 +1,27 @@
+# Validated general-web engines; no specialist or known-noisy defaults.
+use_default_settings:
+  engines:
+    keep_only:
+      - duckduckgo
+      - brave
+      - yahoo
+      - yandex
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  # SEARXNG_SECRET is supplied by Compose from the private .env.
+  limiter: false
+  image_proxy: false
+search:
+  formats:
+    - html
+    - json
+engines:
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: yahoo
+    disabled: false
+  - name: yandex
+    disabled: false
