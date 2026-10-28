@@ -79,4 +79,8 @@ Add per-person storage accounting and a defined quota-exceeded response. Pins an
 
 ## Not yet implemented
 
-Page-reading/document/browser MCP tools, multi-user authentication and provisioning/routing, remotely owned browser sessions, enforced egress, aggregate user quotas, hosted maintenance, production deployment. The full Compose file remains a private backend skeleton. The single-user MCP entry point connects only to the separately provisioned search-only stack in compose.search.yml, not the full backend or personal tool deployment.
+Live page-reading/document/RSS/browser MCP deployment, multi-user authentication and provisioning/routing, remotely owned browser sessions, enforced egress, worker-side aggregate quotas/deadlines, hosted maintenance, and production deployment. The full Compose file remains a private backend skeleton. The single-user MCP entry point connects only to the separately provisioned search-only stack in compose.search.yml, not the full backend or personal tool deployment.
+
+The adapter layer now implements 15 web/document/RSS and 13 browser tool contracts, registered only through explicit backend injection into `create_app()`. A bounded fixed-origin gateway client is included; browser worker transport is not yet implemented. Offline MCP and mock-HTTP tests verify schemas, dispatch, authentication, bounds and screenshot serialization, not runtime isolation. See README.md for the inventory and limits. No startup flags activate these adapters yet, and no live backend was provisioned by this step.
+
+Before activation, enforce fetch/browser egress and worker-side deadlines, cancellation and concurrency; bind browser handles to their owner and define reconnect/expiry behavior; add authenticated large-artifact retrieval beyond the current inline limit. URL syntax validation and adapter timeouts are not substitutes for those controls.

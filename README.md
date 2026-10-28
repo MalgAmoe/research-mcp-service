@@ -101,6 +101,31 @@ docker compose --env-file .env.search -f compose.search.yml stop
 
 The container restarts with Docker (`unless-stopped`); the host MCP development process still has no boot service. Stopping SearXNG while leaving MCP running makes `auto` searches try DDGS; explicit `searxng` searches report unavailable. `health` remains available.
 
+## Tool-port implementation (not yet enabled on the live endpoint)
+
+The MCP adapter layer now covers the remaining personal web tool surface without using the personal deployment:
+
+| Group | Tools implemented as MCP adapters |
+| --- | --- |
+| Web | `web_capabilities`, `web_read`, `web_batch_fetch`, `web_research` |
+| Documents | `web_convert_document`, `web_document`, `web_recent_documents`, `web_artifact` |
+| RSS | `rss_preview`, `rss_subscribe`, `rss_list`, `rss_fetch`, `rss_entries`, `rss_read`, `rss_mark_read` |
+| Browser | `browser_open`, `browser_observe`, `browser_goto`, `browser_click`, `browser_type`, `browser_press`, `browser_scroll`, `browser_wait`, `browser_text`, `browser_find`, `browser_close`, `browser_close_all`, `browser_sessions` |
+
+These 28 adapters are registered only when `create_app()` receives explicit gateway/browser backends. **The production entry point does not wire them or provide an environment switch to enable them yet.** The live Mac endpoint remains `health` + `search`; reconnecting cannot enable tools that have not been deployed.
+
+- `gateway.py` provides a fixed-origin HTTP client with no environment proxy inheritance or redirect following. It does not implement URL-fetch egress protection.
+- Gateway tools share two admission slots and a 90-second client deadline. Browser actions share one slot and a 45-second deadline. Cancellation releases adapter capacity; it does **not** prove that a remote worker has stopped. Worker-side deadlines/admission/cleanup remain mandatory.
+- Backend JSON transfers are capped at 2 MiB. Inline artifacts are capped at 256 KiB (UTF-8 text or base64 binary); larger artifacts are explicitly refused. Authenticated large-artifact transfer remains to be implemented.
+- Document responses expose artifact availability rather than private storage URIs. Backend exceptions and known extraction/feed failure fields are sanitized.
+- Browser screenshots become native MCP image content, not base64 text inside document JSON. Sessions are intended to belong to a separate owner-scoped worker; worker ownership/expiry is not proven by these adapter tests.
+- Browser inputs are bounded; refs cannot inject CSS selectors. Only headless opening is offered. Unsupported Camoufox timezone overrides are rejected, rather than silently ignored.
+- Only the implemented `text` document conversion strategy is exposed. The copied gateway's reserved `structured` setting is not advertised as working conversion.
+
+All 65 offline tests pass, including all routes, full tool discovery (30 with health/search), authentication, validation, busy/timeout/cancellation behavior, native screenshots and transfer bounds. These tests use fake backends; **live reading, storage, RSS and browser integration has not yet been verified through MCP.**
+
+Next: provision this project's own storage; isolate fetching/browser execution and enforce egress; connect the adapters; verify real end-to-end calls before refreshing the Mac client. Do not point the adapter at the personal gateway or import the host browser controller into the MCP entry point.
+
 ## Local development checks
 
 Python 3.12+ and `uv`:
