@@ -1,18 +1,28 @@
 # Private development deployment
 
-## Prepared navigation/link release — not deployed
+## Deployed release 5018cf5
 
-The next source release includes the clarity changes below plus three additional MCP tools (34 after deployment, 31 currently live):
+Both clarity and navigation/link changes are live. The endpoint advertises 34 tools. Live MCP checks passed: heading index, artifact booleans, preview metadata, back/forward URLs, text/element matching, unmatched-condition timeout retaining observation, oversized screenshot fallback, unsupported-format errors, and the NASA project guide PDF (58 URI/internal link annotations). All 112 offline tests pass. Probe browser session was closed. No storage or feed data was purged.
+
+Deployment reused the prior images' dependency/browser layers after verifying that pyproject.toml and uv.lock hashes matched exactly; only source/controller layers changed. Full source Dockerfiles remain the clean-build path. Rollback images: research-mcp-fetch-worker:pre-5018cf5 and research-mcp-control:pre-5018cf5. Deployment/probe logs: .state/deploy-5018cf5.log and .state/release-5018cf5-check.log.
+
+Captured source snapshots:
+- MCP and worker: sha256:537ee44c6620493d4828c71a7b30f6cb73947e8f76cc0e5280d9b83ae8bbfce1
+- Control: sha256:86d9d870f2677bf29016740d3b4fde72390f77bcbd0a5c3f9c76b743a58869c8 (does not package the browser controller)
+
+## Navigation/link release behavior
+
+This release includes the clarity changes below plus three additional MCP tools (34 total):
 
 - `browser_wait_for`: literal case-sensitive body text or first CSS-matched visible element, 1–10,000 ms deadline. Reports matched/timed_out with an observation. Existing text can match immediately; it does not prove new results arrived or global page readiness.
 - `browser_back` / `browser_forward`: browser history APIs, resulting URL, URL-change flag and navigation outcome. Null browser responses are honestly labelled same_document_or_no_entry; same-document history can also return null. Navigation timeout is distinct from that case.
 - Newly converted PDFs include `metadata.extra.pdf_links`: bounded URI annotation destinations and direct internal destination page numbers. Maximum 200 entries and 2,048 URI bytes. Other actions/oversized destinations are counted as omitted; partial/limited/failed states are explicit. No destinations are fetched, and printed/image-based links are not inferred. Annotation failure retains converted text. Existing cached documents are not retroactively rewritten; reconversion is needed to populate this metadata.
 
-112 offline tests pass, including a real generated PDF with URI/internal annotations, MCP dispatch, conditional timeout and null-history handling. Real browser/new-image verification is still required at deployment. No live services have been restarted for either prepared release.
+112 offline tests pass, including a real generated PDF with URI/internal annotations, MCP dispatch, conditional timeout and null-history handling. Real browser/new-image checks also passed through the live endpoint as recorded above.
 
-## Prepared clarity release — not deployed
+## Clarity release behavior
 
-Source changes passed 108 offline tests; live processes/images have not been restarted:
+The clarity subset initially passed 108 offline tests and is now included in the deployed release:
 
 - MCP/control/worker health captures a source SHA-256 once at module import. It hashes packaged Python sources and the controller when present, not credentials/configuration. This identifies a startup source snapshot, not a dependency/image digest; components may differ. No dynamic Git HEAD lookup.
 - `web_document(include_headings=true, heading_offset=0)` returns 100 ATX heading entries per index page with cleaned-Markdown character offsets. The heading index and targeted lookup share one parser; no extraction or stored data changes.
@@ -21,11 +31,11 @@ Source changes passed 108 offline tests; live processes/images have not been res
 - Compact output retains boolean artifact availability fields.
 - Unsupported conversion format, conversion exception, HTTP timeout and worker deadline now have distinct codes. Unknown causes remain generic; HTTP 403 is not automatically described as a CAPTCHA/block.
 
-Deployment requires coordinated control/worker rebuild and MCP restart, followed by live checks. Worker recreation expires interactive sessions. No wait-for-condition/history/PDF-link features are included in this release.
+Deployment used coordinated control/worker recreation and MCP restart. Worker recreation expires interactive sessions. Wait-for-condition/history/PDF-link features are included in the combined release above.
 
 ## Targeted retrieval and safe errors
 
-Live endpoint now exposes 31 tools, including `web_document_find(doc_id, heading=... OR query=..., occurrence=1, max_chars=12000)`. Case-insensitive literal phrase lookup and ATX Markdown heading substring lookup return bounded cached passages with absolute offsets; fenced code headings are ignored. Heading results stop at the next same/higher-level heading, including subsections. No extraction engine or stored original changes. Setext headings and semantic search are not implemented; the existing 2 MiB backend response ceiling still applies.
+The endpoint includes `web_document_find(doc_id, heading=... OR query=..., occurrence=1, max_chars=12000)`. Case-insensitive literal phrase lookup and ATX Markdown heading substring lookup return bounded cached passages with absolute offsets; fenced code headings are ignored. Heading results stop at the next same/higher-level heading, including subsections. No extraction engine or stored original changes. Setext headings and semantic search are not implemented; the existing 2 MiB backend response ceiling still applies.
 
 Worker → gateway → MCP now preserves allowlisted failure codes and upstream HTTP 4xx/5xx status without forwarding exception text or internal addresses. Verified live: heading and repeated-phrase lookup in Python documentation; an HTTP 403 probe returned `Website returned an unsuccessful HTTP status. Upstream HTTP 403. [fetch_bad_status]`. Offline suite: 98 tests. Failures without known HTTP status still cannot report one; full per-attempt error reporting is not claimed.
 
@@ -38,7 +48,7 @@ Verified through the live endpoint: a standard-mode Python documentation batch p
 Remaining: broader failure classification and backend-side pagination for documents exceeding the existing 2 MiB transport ceiling. The current passage implementation fetches the cached document before slicing; it does not yet remove that ceiling. No claims of complete boilerplate removal or client-specific token accounting.
 
 
-The existing authenticated MCP endpoint `http://100.69.41.80:8766/mcp` now advertises 31 tools. Reconnect the Mac client/new conversation to refresh its tool list. Same client token; no client credential change.
+The existing authenticated MCP endpoint `http://100.69.41.80:8766/mcp` now advertises 34 tools. Reconnect the Mac client/new conversation to refresh its tool list. Same client token; no client credential change.
 
 Verified through the actual MCP endpoint: tool listing, web_read with Markdown, rss_preview, browser_open and browser_close_all. Prior worker checks cover four reader modes, PDF conversion, interaction, private subresources, public WSS, and cancellation. This is not a public or multi-user production deployment. Inline artifacts remain limited to 256 KiB.
 
@@ -57,4 +67,4 @@ MCP remains a development background process, not a boot service. PID/log: `.sta
 
 Research orchestration searches in the MCP process using its existing search backend, then calls isolated batch fetching; the legacy gateway `/research` and direct search routes remain blocked. Gateway transport bounds and worker limits remain in force. End-to-end verification of every tool and gateway-layer disconnect propagation remain follow-up work; do not claim comprehensive coverage from the four live smoke calls.
 
-Repository cleanup checkpoint: `57ad401` preserves the tested pre-cleanup runtime. Cleanup removed the unused all-in-one Dockerfile/engine services, unimplemented job lookup route/models/storage access, unused Store protocol and imports; README/DESIGN now describe the current runtime rather than historical implementation stages. Retention, tests, explicit smoke checks and private operational evidence remain. Cleanup was verified offline without restarting live services; running images still contain the preceding source until a coordinated rebuild. Personal gateway services and all stored data were not changed.
+Repository cleanup checkpoint: `57ad401` preserves the tested pre-cleanup runtime. Cleanup removed the unused all-in-one Dockerfile/engine services, unimplemented job lookup route/models/storage access, unused Store protocol and imports; README/DESIGN now describe the current runtime rather than historical implementation stages. Retention, tests, explicit smoke checks and private operational evidence remain. Cleanup was initially verified offline and is now included in the deployed source layers. Personal gateway services and all stored data were not changed.

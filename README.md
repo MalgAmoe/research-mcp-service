@@ -1,6 +1,6 @@
 # Research MCP Service
 
-Private single-user research service: **31 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale. **Not a public or multi-user production service.**
+Private single-user research service: **34 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale. **Not a public or multi-user production service.**
 
 - [LIVE-STATUS.md](LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
 - [DESIGN.md](DESIGN.md): runtime boundaries and remaining security work.
@@ -23,10 +23,10 @@ The base Compose file starts storage only. The old all-in-one gateway/engine pro
 - Search: explicit SearXNG/DDGS provider, automatic fallback, domains, page, freshness and language; optional diagnostics. Upstream pagination may overlap; language/freshness are not guarantees and missing publication dates are not inferred from snippets.
 - Reading: `light` HTTP/Trafilatura; `standard` Chromium/structured Markdown; `browser` Chromium or Camoufox; `auto` fallback. Stealth requires `strategy=browser` and `browser_profile=stealth`; it does not guarantee access past blocking.
 - Documents: PDF, DOCX, PPTX, TXT, Markdown and HTML text conversion; saved originals and extracted text. Text extraction is not complete document/layout understanding.
-- Retrieval: bounded cached passages, continuation offsets, and `web_document_find` by literal phrase or ATX Markdown heading. Original evidence remains unchanged.
+- Retrieval: bounded cached passages, continuation offsets, an optional heading index, and `web_document_find` by literal phrase or ATX Markdown heading. Original evidence remains unchanged.
 - Batch/research: compact source summaries and separate failures. Full text is retrieved separately, even if an older client requests full Markdown in a batch.
 - RSS: preview, subscribe/list, fetch, cached entries and read-state updates. Unsubscribe is not implemented.
-- Browser: open/observe/navigate/click/type/press/scroll/wait/text/find/close/list, with native image screenshots. Four ephemeral sessions per owner worker; failures/restarts can expire them.
+- Browser: open/observe/navigate/click/type/press/scroll/wait/text/find/close/list, bounded text/element waits, explicit back/forward, and native image screenshots with observation-preserving failure warnings. Four ephemeral sessions per owner worker; failures/restarts can expire them.
 
 Live MCP uses one text representation, not duplicate text/structured JSON. Documents default to 12,000-character passages, at most 30,000 per retrieval. Backend JSON is limited to 2 MiB; passage lookup currently retrieves the whole cached document before slicing, so this ceiling still applies. Inline artifacts are limited to 256 KiB; screenshots to 1 MiB. Batches accept 15 URLs and a concurrency argument of 1–10; actual isolated fetch execution has two slots. These are limits, not throughput promises.
 
