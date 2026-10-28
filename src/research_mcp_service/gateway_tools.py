@@ -75,9 +75,8 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
 
     @server.tool(annotations=LOCAL_READ)
     async def web_capabilities() -> dict[str, Any]:
-        """Get workflow, cache/RSS side effects, extraction tradeoffs, limits/recovery and health scope."""
-        from .contracts import CONTRACT
-        return {**await request('GET', '/capabilities'), **CONTRACT}
+        """Describe this private gateway's reading, conversion and browser-profile capabilities."""
+        return await request('GET', '/capabilities')
 
     @server.tool(annotations=FETCH)
     async def web_read(url: Url, strategy: Strategy = 'light', browser_profile: Profile = 'standard',
@@ -88,8 +87,8 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
         Light uses HTTP; standard renders Chromium with structured Markdown. Camoufox requires
         strategy=browser AND browser_profile=stealth. Use web_convert_document for PDF/Office URLs.
         Success is not verified completeness/fidelity. Cache reuse depends on strategy/profile;
-        force_refresh acquires a new snapshot ID without replacing earlier records. Cache hits retain IDs.
-        Use web_document for saved passages; web_capabilities explains cache/limit details.
+        force_refresh bypasses reuse and may replace cached content. IDs are cache handles, not archives.
+        Use web_document for saved passages; URL lookup considers the last saved document.
         """
         _profile(strategy, browser_profile)
         return await request('POST', '/read_url', payload=dict(url=url, strategy=strategy,
@@ -140,7 +139,7 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
                                    include_markdown: bool = False) -> dict[str, Any]:
         """Download and convert PDF, TXT, Markdown, HTML, DOCX or PPTX into your private cache.
 
-        Use web_read for HTML page reading. Conversion always fetches and saves a new snapshot ID.
+        Use web_read for HTML page reading. Conversion always fetches and may replace cached content.
         Extracted text may omit formatting, figures or links; success is not a fidelity guarantee.
         PDF annotation links have explicit coverage metadata. Only text strategy is implemented.
         """

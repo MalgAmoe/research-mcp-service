@@ -54,14 +54,6 @@ class GatewayToolTests(unittest.TestCase):
                     response = client.post('/mcp', headers=HEADERS, json=rpc(name, args)).json()['result']
                     self.assertFalse(response.get('isError'), response)
                     backend.assert_awaited_once_with(method, path, **kwargs)
-                    if name == 'web_capabilities':
-                        contract = tool_data(response)
-                        self.assertEqual(contract['limits']['batch_urls'], 15)
-                        self.assertEqual(contract['limits']['gateway_json_bytes'], MAX_RESPONSE_BYTES)
-                        self.assertEqual(contract['limits']['inline_artifact_bytes'], MAX_ARTIFACT_BYTES)
-                        self.assertIn('cache', contract)
-                        self.assertIn('rss', contract)
-                        self.assertIn('health_scope', contract)
 
     def test_research_searches_then_batches_unique_urls(self):
         search = AsyncMock(return_value={'query': 'research', 'results': [{'url': URL}, {'url': URL}], 'status': 'ok'})

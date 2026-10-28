@@ -1,12 +1,10 @@
 # Private development deployment
 
-## Prepared snapshot/contract release — not deployed
+## Prepared description clarifications — not deployed
 
-Fresh page acquisitions and document conversions now use UUID snapshot IDs rather than hashes of content prefixes. Even identical fresh acquisitions get distinct IDs; cache hits retain their saved ID/timestamp. Prior records and original/Markdown artifacts are not overwritten by refresh; URL indexing remains last-saved-wins. Existing IDs require no migration. Previously overwritten versions cannot be restored by this change. Extra snapshots increase storage usage; retention remains manual.
+Removed the undeployed UUID-per-acquisition change, its tests, and the expanded capabilities module/wiring. Cache implementation and capabilities output match deployed fd40a6b again. Document IDs are cache handles, not archives; refresh can replace cached content.
 
-MCP initialization/tool descriptions now explain workflow, read/conversion routing, extraction limitations, browser timing/lifecycle/keyboard behavior and RSS persistence. web_capabilities adds cache/version rules, consolidated limits/recovery, RSS semantics, error guidance and the scope of each health endpoint. This clarifies existing behavior rather than implementing feed refresh caching or a new machine-readable error taxonomy. force_refresh remains a compatibility no-op for RSS.
-
-110 offline tests pass, including acquisition/storage regression checks for long common prefixes, changed PDF originals, changed extraction of identical originals, identical refreshes and cache reuse; capabilities are checked through the real MCP protocol. No live restart or stored-data migration/deletion performed. Live checks are pending deployment.
+Retained brief workflow, reading/conversion, extraction-limit, browser timing/lifecycle/keyboard and RSS-side-effect descriptions. RSS force_refresh remains a compatibility no-op. No new storage policy or runtime feature is introduced. No deployment, cache migration or data deletion performed.
 
 ## Deployed cleanup release fd40a6b
 
