@@ -42,6 +42,7 @@ from .models import (
     RssFetchRequest,
     RssFetchResponse,
     SearchResult,
+    SearchAttempt,
     SearchWebRequest,
     SearchWebResponse,
 )
@@ -49,7 +50,7 @@ from .models import (
 
 def _domain(url: str) -> str | None:
     parsed = urlparse(url)
-    return parsed.netloc or None
+    return parsed.hostname or None
 
 
 def _doc_id(url: str, content: str = "") -> str:
@@ -94,40 +95,38 @@ def _metadata_with_cache_hit(doc: Document, cache_hit: bool) -> DocumentMetadata
     return doc.metadata.model_copy(update={"extra": extra})
 
 
-async def search_web(req: SearchWebRequest) -> SearchWebResponse:
-    provider = settings.search_provider
-    if provider not in {"auto", "ddgs", "searxng"}:
-        raise GatewayError(
-            "search_provider_invalid",
-            "SEARCH_PROVIDER must be auto, ddgs, or searxng",
-            status_code=500,
-            provider=provider,
-        )
-    if provider == "searxng":
-        return await _search_searxng(req)
-    primary_result = None
-    if provider == "auto":
+async def search_web(req: SearchWebRequest, *, provider: str | None = None) -> SearchWebResponse:
+    provider = provider or settings.search_provider
+    if provider not in {'auto', 'ddgs', 'searxng'}:
+        raise GatewayError('search_provider_invalid', 'Unknown search provider', status_code=400)
+    attempts: list[SearchAttempt] = []
+
+    async def attempt(name, function):
         try:
-            primary_result = await _search_searxng(req)
-            if primary_result.results:
-                return primary_result
-        except GatewayError:
-            pass
-    try:
-        fallback = await _search_ddgs(req)
-        if not fallback.results and primary_result is not None:
-            return primary_result
-        return fallback
-    except Exception as exc:
-        if primary_result is not None:
-            return primary_result
-        raise GatewayError(
-            "search_failed",
-            "Could not obtain search results from the configured providers",
-            status_code=502,
-            query=req.query,
-            cause=str(exc),
-        ) from exc
+            response = await function(req)
+            attempts.append(SearchAttempt(provider=name, status=response.status,
+                result_count=len(response.results), engine_failures=response.engine_failures))
+            return response
+        except Exception as exc:
+            # Preserve routing evidence, never provider exception text or private URLs.
+            attempts.append(SearchAttempt(provider=name, status='error',
+                error_code=exc.code if isinstance(exc, GatewayError) else 'provider_failed'))
+            return None
+
+    primary = None
+    result = None
+    if provider in {'auto', 'searxng'}:
+        primary = await attempt('searxng', _search_searxng)
+        if primary is not None and (primary.results or provider == 'searxng'):
+            result = primary
+    if result is None and provider in {'auto', 'ddgs'}:
+        fallback = await attempt('ddgs', _search_ddgs)
+        result = fallback if fallback is not None and fallback.results else (primary or fallback)
+    if result is None:
+        raise GatewayError('search_failed', 'Search providers are unavailable', status_code=502,
+            attempts=[item.model_dump() for item in attempts])
+    result.attempts = attempts
+    return result
 
 
 async def _search_ddgs(req: SearchWebRequest) -> SearchWebResponse:
@@ -174,9 +173,7 @@ async def _search_ddgs(req: SearchWebRequest) -> SearchWebResponse:
         if not url or re.search(r"https?://(?:www\.)?bing\.com/aclick", url):
             continue
         domain = _domain(url)
-        if req.include_domains and domain not in req.include_domains:
-            continue
-        if req.exclude_domains and domain in req.exclude_domains:
+        if not _search_domain_allowed(domain, req):
             continue
         resource_type, detected_suffix = _detect_resource_type(url, None)
         results.append(
@@ -187,7 +184,7 @@ async def _search_ddgs(req: SearchWebRequest) -> SearchWebResponse:
                 source="ddgs",
                 rank=len(results) + 1,
                 published_at=_search_published_at(item.get("date")),
-                engines=[settings.ddgs_backend],
+                engines=[],  # Configured backends are not verified per-result provenance.
                 category=req.category,
                 domain=domain,
                 resource_type=resource_type,
@@ -250,9 +247,7 @@ async def _search_searxng(req: SearchWebRequest) -> SearchWebResponse:
         if not url:
             continue
         domain = _domain(url)
-        if req.include_domains and domain not in req.include_domains:
-            continue
-        if req.exclude_domains and domain in req.exclude_domains:
+        if not _search_domain_allowed(domain, req):
             continue
         engines = [str(engine) for engine in item.get("engines", [])]
         working_engines.update(engines)
@@ -288,12 +283,22 @@ async def _search_searxng(req: SearchWebRequest) -> SearchWebResponse:
     )
 
 
+def _search_domain_allowed(domain: str | None, req: SearchWebRequest) -> bool:
+    host = (domain or '').lower().rstrip('.')
+    def matches(value):
+        value = value.lower().rstrip('.')
+        return host == value or host.endswith('.' + value)
+    return (not req.include_domains or any(matches(value) for value in req.include_domains)) and not any(
+        matches(value) for value in req.exclude_domains)
+
+
 def _build_search_query(req: SearchWebRequest) -> str:
     query = req.query
-    for domain in req.include_domains:
-        query += f" site:{domain}"
+    if req.include_domains:
+        clauses = ' OR '.join(f'site:{domain}' for domain in req.include_domains)
+        query += ' ' + (f'({clauses})' if len(req.include_domains) > 1 else clauses)
     for domain in req.exclude_domains:
-        query += f" -site:{domain}"
+        query += f' -site:{domain}'
     return query
 
 

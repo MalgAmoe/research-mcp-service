@@ -51,7 +51,7 @@ The `health` tool reports MCP connectivity and whether search is enabled, **not*
 
 ## Enable independent web search
 
-Only a dedicated SearXNG container is needed for this stage—no Redis, MinIO, browser worker, or existing personal gateway. The copied search implementation is used from this repository. DDGS fallback is not enabled in this first MCP search adapter.
+Only a dedicated SearXNG container is needed for this stage—no Redis, MinIO, browser worker, or existing personal gateway. The copied search implementation is maintained in this repository. In `auto` mode it uses this project's SearXNG instance first, then DDGS on an error or zero usable results. Usable `degraded` SearXNG results do not trigger fallback.
 
 ```bash
 python3 scripts/init_search.py
@@ -68,9 +68,28 @@ SEARXNG_URL=http://127.0.0.1:18080
 
 `init_search.py` creates a mode-0600 `.env.search` with a fresh SearXNG secret; it refuses to overwrite an existing file. `--port` can select a different free loopback port; keep `SEARXNG_URL` in sync. The default Compose project name is `research-mcp-search-dev`, with its own network, no persistent volumes, and no reference to another application's services. Do not override its project name to an existing stack. This is a single-user development setup, not automated tenant provisioning.
 
-Search takes `query` (1–2,000 characters), `limit` (1–10; default 5), and optional `freshness` (`any`, `day`, `week`, `month`, `year`). It returns bounded snippets, source URLs, provider/status and upstream engine failures. Freshness is best-effort. A `degraded` status with usable results is not a total search failure. Returned text is untrusted; queries are sent to external search engines, so do not submit secrets. The tool does not fetch result pages or save them to storage.
+Search parameters:
 
-At most two searches execute concurrently in this single MCP process; additional calls receive a retryable busy tool error rather than queueing indefinitely. Each call has a 25-second overall deadline. Provider errors are reported without internal URLs or exception details. Restart/reconnect or refresh tools in the client after enabling search. This does not rotate the MCP token or change its URL.
+| Parameter | Values |
+| --- | --- |
+| `query` | 1–2,000 characters |
+| `limit` | 1–50; default 5 |
+| `freshness` | `any`, `day`, `week`, `month`, `year` |
+| `category` | `general` or `news` |
+| `page` | 1–10 |
+| `language` | Optional language tag, e.g. `en` or `fr-FR` |
+| `include_domains`, `exclude_domains` | Up to 10 plain domains each; normalized and validated |
+| `provider` | `auto` (default), `searxng`, or `ddgs` |
+
+Domain filters match the specified host and its subdomains, not similarly named domains. Multiple included domains are OR alternatives; exclusions take precedence. Filtering is also enforced on returned results. Unlike the original copied implementation, this avoids requiring a result to satisfy several independent `site:` restrictions.
+
+Responses retain provider/status, per-result source/engine metadata where available, and an ordered `attempts` history—including a failed primary when fallback succeeds. A `degraded` status with usable results is not a total search failure. DDGS does not provide verified per-result engine provenance, so its `engines` arrays are empty rather than claiming its configured backends all produced each result.
+
+Freshness, news categories, pagination and language depend on upstream support. In particular, DDGS uses the configured region (`DDGS_REGION`, default `us-en`); the language parameter is not independently enforced there. Results can be fewer than requested after filtering or upstream limits. There is no relevance reranker or claim of guaranteed search accuracy.
+
+Typical snippets are retained; exceptional titles/snippets are capped at 500/4,000 characters, and the response is bounded to about 500 KB. `truncation`, `requested_limit` and `returned_count` make limits visible. Unsupported or oversized URLs are omitted, never silently shortened into broken links. Returned text is untrusted; queries are sent to external engines, so do not submit secrets. Search does not fetch result pages or save them to storage.
+
+At most two searches execute concurrently in this single MCP process; additional calls receive a retryable busy tool error rather than queueing indefinitely. Each call has a 60-second overall deadline including startup, primary and fallback. Provider calls run in a short-lived process; timeouts and cancellations kill/reap it before releasing capacity, including DDGS's blocking thread workers. This uses Linux process groups and adds small per-call startup overhead. Provider errors are reported without internal URLs or exception details. Restart/reconnect or refresh tools in the client after enabling search. This does not rotate the MCP token or change its URL.
 
 ```bash
 # Inspect/stop only this project's search backend:
@@ -78,7 +97,7 @@ docker compose --env-file .env.search -f compose.search.yml ps
 docker compose --env-file .env.search -f compose.search.yml stop
 ```
 
-The container restarts with Docker (`unless-stopped`); the host MCP development process still has no boot service. Stopping search while leaving MCP running makes search calls fail but leaves `health` available.
+The container restarts with Docker (`unless-stopped`); the host MCP development process still has no boot service. Stopping SearXNG while leaving MCP running makes `auto` searches try DDGS; explicit `searxng` searches report unavailable. `health` remains available.
 
 ## Local development checks
 

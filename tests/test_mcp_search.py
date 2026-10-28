@@ -6,7 +6,7 @@ import httpx
 from starlette.testclient import TestClient
 
 from research_gateway.models import SearchResult, SearchWebResponse
-from research_mcp_service.search import search_backend
+from research_mcp_service.search import search_backend, execute_search, SearchOptions
 from research_mcp_service.server import create_app
 
 TOKEN = 'offline-test-token-not-for-deployment-123456'
@@ -29,12 +29,13 @@ class SearchToolTests(unittest.TestCase):
             self.assertEqual({t['name'] for t in tools}, {'health', 'search'})
             response = client.post('/mcp', headers=HEADERS, json=call({'query': ' test ', 'limit': 3}))
             self.assertEqual(response.json()['result']['structuredContent'], RESULT)
-        backend.assert_awaited_once_with('test', 3, 'any')
+        backend.assert_awaited_once_with('test', 3, 'any', category='general', page=1,
+            language=None, include_domains=[], exclude_domains=[], provider='auto')
 
     def test_invalid_input_never_reaches_backend(self):
         backend = AsyncMock(return_value=RESULT)
         with TestClient(create_app(TOKEN, search_backend=backend), base_url='http://127.0.0.1:8766') as client:
-            for arguments in [{'query': ' '}, {'query': 'x' * 2001}, {'query': 'test', 'limit': 11},
+            for arguments in [{'query': ' '}, {'query': 'x' * 2001}, {'query': 'test', 'limit': 51},
                               {'query': 'test', 'freshness': 'tomorrow'}]:
                 data = client.post('/mcp', headers=HEADERS, json=call(arguments)).json()
                 self.assertTrue(data['result']['isError'], data)
@@ -48,7 +49,7 @@ class SearchToolTests(unittest.TestCase):
             self.assertNotIn('private-provider-secret', response.text)
 
     def test_timeout_releases_slot(self):
-        async def slow(*args):
+        async def slow(*args, **kwargs):
             await asyncio.sleep(1)
         with TestClient(create_app(TOKEN, search_backend=slow, search_timeout=0.01), base_url='http://127.0.0.1:8766') as client:
             for _ in range(3):
@@ -60,7 +61,7 @@ class SearchToolTests(unittest.TestCase):
 class SearchAsyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_two_slots_and_no_unbounded_queue(self):
         ready = asyncio.Event(); release = asyncio.Event(); count = 0
-        async def backend(*args):
+        async def backend(*args, **kwargs):
             nonlocal count
             count += 1
             if count == 2:
@@ -83,9 +84,10 @@ class SearchAsyncTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_adapter_bounds_snippets(self):
         response = SearchWebResponse(query='test', status='degraded', engine_failures=[['ddg', 'CAPTCHA']],
-            results=[SearchResult(title='x' * 400, snippet='y' * 3000, url='https://example.org/', rank=1)])
-        with patch('research_mcp_service.search._search_searxng', new=AsyncMock(return_value=response)):
-            result = await search_backend('test', 1, 'any')
-        self.assertEqual(len(result['results'][0]['title']), 300)
-        self.assertEqual(len(result['results'][0]['snippet']), 2000)
+            results=[SearchResult(title='x' * 600, snippet='y' * 5000, url='https://example.org/', rank=1)])
+        with patch('research_mcp_service.search.search_web', new=AsyncMock(return_value=response)):
+            result = await execute_search(SearchOptions(query='test', limit=1))
+        self.assertEqual(len(result['results'][0]['title']), 500)
+        self.assertEqual(len(result['results'][0]['snippet']), 4000)
+        self.assertEqual(result['truncation'], ['snippet', 'title'])
         self.assertEqual(result['engine_failures'], [['ddg', 'CAPTCHA']])

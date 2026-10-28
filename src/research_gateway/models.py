@@ -79,12 +79,21 @@ class SearchResult(BaseModel):
     detected_suffix: str | None = None
 
 
+class SearchAttempt(BaseModel):
+    provider: str
+    status: str
+    result_count: int = 0
+    engine_failures: list[list[str]] = Field(default_factory=list)
+    error_code: str | None = None
+
+
 class SearchWebResponse(BaseModel):
     query: str
     results: list[SearchResult]
     status: Literal["ok", "degraded", "no_results", "unavailable"] = "ok"
     provider: str = "searxng"
     engine_failures: list[list[str]] = Field(default_factory=list)
+    attempts: list[SearchAttempt] = Field(default_factory=list)
 
 
 class PublicReadRequest(BaseModel):
