@@ -150,4 +150,6 @@ No cleanup timer or automatic deletion is installed. Do not add independent Redi
 
 Tested on Ubuntu 24.04.5 x86-64, 4 vCPU / 8 GB RAM: application/browser builds, private Unix control, systemd startup, live search, document storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run. MinIO was available from a cached official image, not a successful registry pull.
 
-Still to verify: an accessible MinIO image source for fresh installs, actual reboot recovery and destructive retention on disposable test data.
+VPS reboot recovery is verified: the service and containers resumed automatically, and cached document retrieval, acquisition and Chromium checks passed. Provider-specific boot configuration is recorded in the deployment's private operations notes.
+
+Still to verify: an accessible MinIO image source for fresh installs and destructive retention on disposable test data.

@@ -7,7 +7,7 @@ Setup and maintenance commands: [INSTALL.md](INSTALL.md). Architecture: [DESIGN.
 | Installation | Source revision | MCP access | Control connection | Startup |
 |---|---|---|---|---|
 | Local development | 283b6f2 | `http://100.69.41.80:8766/mcp`, bearer authentication | Internal container TCP | Background process |
-| Ubuntu VPS | 3ca1223 | Loopback port 8766 through SSH, bearer authentication | Private Unix socket | Enabled user-systemd service |
+| Ubuntu VPS | 3ca1223 | HTTPS reverse proxy, bearer authentication; backend loopback | Private Unix socket | Enabled user-systemd service |
 
 Both expose 34 tools and have separate credentials, caches and browser sessions. The original personal gateway is a separate service.
 
@@ -34,7 +34,9 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 - Local: live search/acquisition, saved passages/headings, browser history/condition waits, screenshot-limit fallback, PDF annotation links and RSS preview checked.
 - VPS: application/browser builds, 119 offline tests, live search, page storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run checked.
 - Current repository: 121 offline tests pass.
-- Reboot recovery and destructive retention execution on real data remain untested.
+- VPS reboot recovery verified: SSH returned in 22 seconds, HTTPS/MCP in 38 seconds; cached document retrieval, search call and Chromium passed afterward. No failed system services; a provider cloud-init deprecation warning remains.
+- Public TLS, bearer rejection and certificate-renewal/reload dry run passed. Renewal checks run every six hours.
+- Destructive retention execution on real data remains untested.
 - Search providers can return degraded results; request diagnostics when investigating coverage or failures.
 
 ## Operational limits
