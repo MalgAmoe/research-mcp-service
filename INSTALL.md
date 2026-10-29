@@ -21,7 +21,7 @@ sudo usermod -aG docker research
 sudo -iu research
 ```
 
-From the service user's shell, install uv normally (skip this if a suitable uv is already installed). Version 0.11.9 was used for the VPS trial; do not copy another machine's executable:
+From the service user's shell, install uv (skip if already installed). Tested version: 0.11.9.
 
 ```sh
 python3 -m venv ~/.local/share/research-bootstrap
@@ -68,7 +68,7 @@ python3 scripts/setup_server.py status
 
 Before dependency installation or browser builds, `up` pulls the configured MinIO, Redis and SearXNG images. If a pull fails, it stops without starting services or copying/substituting an image.
 
-**MinIO availability warning:** the configured version is `minio/minio:RELEASE.2025-09-07T16-13-09Z`, not `latest` or a digest-only reference. During the VPS trial, this release could not be pulled from Docker Hub or the official Quay mirror. A readable version tag does not solve registry availability. Until an accessible source is agreed and verified, a fresh install may stop at this preflight. Do not bypass it with an automatic cached-image transfer or an unreviewed mirror.
+**MinIO prerequisite:** `minio/minio:RELEASE.2025-09-07T16-13-09Z` was unavailable from Docker Hub and Quay at the last check. Verify an accessible image source before a fresh installation. Setup stops on pull failure; it does not copy or substitute images.
 
 `up` starts the dedicated search project and this instance's storage/egress/worker/control project. Generated images and volumes are instance-scoped. Build/install failures stop the command; already-started components are left in place for inspection, not purged. `up --no-build` starts previously provisioned images without dependency synchronization or the explicit registry preflight; it is intended for restarts, not as a workaround for an incomplete fresh installation.
 
@@ -148,8 +148,6 @@ No cleanup timer or automatic deletion is installed. Do not add independent Redi
 
 ## Verification status
 
-A separate Ubuntu 24.04.5 x86-64 VPS (4 vCPU, 8 GB RAM) built the application/browser images and ran the Git checkout with fresh credentials, private Unix control and an enabled user-systemd service. All 119 then-current offline tests passed there. Live MCP search, page acquisition/storage/retrieval, Chromium, Camoufox, proxy isolation and retention dry-run checks passed. Only SSH was publicly listening. Search returned results while reporting a DuckDuckGo CAPTCHA; that upstream limitation was not bypassed.
+Tested on Ubuntu 24.04.5 x86-64, 4 vCPU / 8 GB RAM: application/browser builds, private Unix control, systemd startup, live search, document storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run. MinIO was available from a cached official image, not a successful registry pull.
 
-**Exception:** MinIO could not be pulled from official registries. The trial used a transferred cached official image with its exact digest verified; no data or credentials were copied. This is recorded as an exception, not the recommended installation procedure or proof that all dependencies are freshly obtainable. Future setup must stop at the failed pull pending an agreed image source.
-
-Boot startup is enabled, but an actual reboot cycle remains untested. An initial Camoufox assertion incorrectly expected the page title in body text; the corrected temporary probe passed without changing application code. The original local deployment was left untouched.
+Still to verify: an accessible MinIO image source for fresh installs, actual reboot recovery and destructive retention on disposable test data.
