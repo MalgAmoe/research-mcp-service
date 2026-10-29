@@ -1,5 +1,11 @@
 # Private development deployment
 
+## Fresh-server trial and pending installation follow-up
+
+The public Git checkout at revision 3ca1223 was installed on a separate Ubuntu 24.04.5 x86-64 VPS (4 vCPU / 8 GB). Fresh credentials, Unix control, private storage and an enabled user-systemd service worked. 119 offline tests and live search, storage/retrieval, Chromium, Camoufox, proxy isolation and retention dry-run checks passed. Reboot remains untested. MinIO could not be pulled from official registries; a cached official image was transferred for the trial. This exception is not the future installation procedure. No local cached data or credentials were copied.
+
+Pending repo changes use the explicit MinIO release tag RELEASE.2025-09-07T16-13-09Z, preflight upstream image pulls before dependency/browser builds, and document Git-based setup/updates and normal uv installation. A version tag does not fix the observed registry unavailability; setup stops rather than copying/substituting an image. 121 offline tests pass. These follow-up changes have not been applied to either running deployment.
+
 ## Deployed release 283b6f2 — no deletion or scheduling enabled
 
 Control/worker source layers and host MCP were updated after matching dependency manifest/lock hashes against the prior images. Rollback images end in pre-283b6f2. This deployment retains its internal TCP control connection; it was not migrated to the fresh-server socket overlay or a boot service.

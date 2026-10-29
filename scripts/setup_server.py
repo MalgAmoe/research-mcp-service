@@ -146,6 +146,10 @@ def main():
         if args.no_build and not (ROOT / '.venv/bin/python').exists():
             raise FileNotFoundError('Python environment is missing; run up without --no-build first')
         if not args.no_build:
+            # Fail before expensive browser builds or starting any services if
+            # an upstream image is unavailable. Never substitute cached exports.
+            cmd, env = compose(); run(cmd + ['pull', 'minio', 'redis'], env)
+            cmd, env = compose(True); run(cmd + ['pull', 'searxng'], env)
             run(['uv', 'sync', '--locked', '--no-dev', '--python', '3.12'])
             cmd, env = compose(); run(cmd + ['build', 'egress', 'fetch-worker', 'control'], env)
         for search in [True, False]:
@@ -158,3 +162,5 @@ if __name__ == '__main__':
         main()
     except (ValueError, FileExistsError, FileNotFoundError) as exc:
         sys.exit(str(exc))
+    except subprocess.CalledProcessError as exc:
+        sys.exit(f'Setup stopped (exit {exc.returncode}). Review the command output; no image substitution or automatic rollback was attempted.')

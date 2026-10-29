@@ -10,7 +10,38 @@ This is a **single-owner loopback/Tailscale deployment**, not a public hosting s
 - For remote clients, install/connect Tailscale first and limit access with your Tailnet policy. Otherwise keep the default loopback bind and use SSH forwarding.
 - Start with roughly 8 GiB RAM and 20 GiB free disk for images/browser assets/cache; actual needs depend on workload. No automatic retention is enabled.
 
-Transfer **tracked source only** to a short path such as `/srv/research-mcp` owned by the service user. Use your Git checkout, or `git archive HEAD` from this repo. Do not copy another installation's `.env*`, `.secrets/`, `.state/`, `.venv/` or Docker volumes. The repo currently has no publication remote.
+On a fresh Ubuntu 24.04 server, an administrator can install the prerequisites and create the service user:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2 python3-venv ca-certificates git
+sudo systemctl enable --now docker
+sudo useradd --create-home --shell /bin/bash research  # omit if this user already exists
+sudo usermod -aG docker research
+sudo -iu research
+```
+
+From the service user's shell, install uv normally (skip this if a suitable uv is already installed). Version 0.11.9 was used for the VPS trial; do not copy another machine's executable:
+
+```sh
+python3 -m venv ~/.local/share/research-bootstrap
+~/.local/share/research-bootstrap/bin/pip install uv==0.11.9
+mkdir -p ~/.local/bin
+ln -s ~/.local/share/research-bootstrap/bin/uv ~/.local/bin/uv
+export PATH="$HOME/.local/bin:$PATH"
+uv --version
+```
+
+Use a real Git checkout so updates and deployed revisions remain trackable:
+
+```sh
+git clone https://github.com/MalgAmoe/research-mcp-service.git ~/research-mcp
+cd ~/research-mcp
+git status --short
+git rev-parse HEAD
+```
+
+For `/srv/research-mcp` instead, have the administrator provide an empty directory owned by the service user and clone there. Do not copy another installation's `.env*`, `.secrets/`, `.state/`, `.venv/`, Docker volumes or container images.
 
 ## Initialize and start
 
@@ -35,7 +66,11 @@ echo $! > .state/setup.pid
 python3 scripts/setup_server.py status
 ```
 
-`up` starts the dedicated search project and this instance's storage/egress/worker/control project. Generated images and volumes are instance-scoped. Build/install failures stop the command; already-started components are left in place for inspection, not purged. `up --no-build` starts existing images without dependency synchronization.
+Before dependency installation or browser builds, `up` pulls the configured MinIO, Redis and SearXNG images. If a pull fails, it stops without starting services or copying/substituting an image.
+
+**MinIO availability warning:** the configured version is `minio/minio:RELEASE.2025-09-07T16-13-09Z`, not `latest` or a digest-only reference. During the VPS trial, this release could not be pulled from Docker Hub or the official Quay mirror. A readable version tag does not solve registry availability. Until an accessible source is agreed and verified, a fresh install may stop at this preflight. Do not bypass it with an automatic cached-image transfer or an unreviewed mirror.
+
+`up` starts the dedicated search project and this instance's storage/egress/worker/control project. Generated images and volumes are instance-scoped. Build/install failures stop the command; already-started components are left in place for inspection, not purged. `up --no-build` starts previously provisioned images without dependency synchronization or the explicit registry preflight; it is intended for restarts, not as a workaround for an incomplete fresh installation.
 
 For an initial foreground MCP run:
 
@@ -81,7 +116,7 @@ docker compose --env-file .env.runtime -f docker-compose.yml -f compose.workers.
 
 Coordinate downtime: worker recreation expires browser sessions. Back up private configuration and Redis/MinIO volumes before significant changes; this workflow does not implement automated backups or migrations. Use a consistent stopped-storage backup rather than copying live database files. Preserve the matching credentials with any volume backup.
 
-For an update, stop MCP, update the checkout, run `setup_server.py up`, then restart MCP and rerun checks. The Unix endpoint path remains stable across container recreation; no IP edits are needed. Never run initialization over existing data or use `down -v` as routine cleanup. A rollback may require the previous source/image and compatible data backup; this script does not claim automatic transactional rollback.
+For an update, coordinate downtime, check `git status --short` and record `git rev-parse HEAD`. Stop MCP, run `git pull --ff-only`, then `python3 scripts/setup_server.py up`, restart MCP and rerun checks. Do not discard local changes or reset a divergent checkout automatically. The Unix endpoint path remains stable across container recreation; no IP edits are needed. Never run initialization over existing data or use `down -v` as routine cleanup. A rollback may require the previous source/image and compatible data backup; this script does not claim automatic transactional rollback.
 
 ## Manual cache retention
 
@@ -113,4 +148,8 @@ No cleanup timer or automatic deletion is installed. Do not add independent Redi
 
 ## Verification status
 
-Verified here: fresh-directory generation and overwrite refusal, generated Compose validation, retained isolation settings, authenticated repeated Unix-socket calls, and a non-root network-none Docker process serving the host through the socket mount. Offline suite passes. **A complete cold build and boot-cycle on a separate fresh server has not yet been performed.** Existing live deployment was not switched to this topology.
+A separate Ubuntu 24.04.5 x86-64 VPS (4 vCPU, 8 GB RAM) built the application/browser images and ran the Git checkout with fresh credentials, private Unix control and an enabled user-systemd service. All 119 then-current offline tests passed there. Live MCP search, page acquisition/storage/retrieval, Chromium, Camoufox, proxy isolation and retention dry-run checks passed. Only SSH was publicly listening. Search returned results while reporting a DuckDuckGo CAPTCHA; that upstream limitation was not bypassed.
+
+**Exception:** MinIO could not be pulled from official registries. The trial used a transferred cached official image with its exact digest verified; no data or credentials were copied. This is recorded as an exception, not the recommended installation procedure or proof that all dependencies are freshly obtainable. Future setup must stop at the failed pull pending an agreed image source.
+
+Boot startup is enabled, but an actual reboot cycle remains untested. An initial Camoufox assertion incorrectly expected the page title in body text; the corrected temporary probe passed without changing application code. The original local deployment was left untouched.

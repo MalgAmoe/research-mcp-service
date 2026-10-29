@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
+from unittest.mock import patch
 
 from research_mcp_service.gateway import GatewayClient
 
@@ -12,6 +14,34 @@ spec.loader.exec_module(setup)
 
 
 class SetupTests(unittest.TestCase):
+    def test_image_pull_failure_stops_before_build_or_start(self):
+        with patch('sys.argv', ['setup_server.py', 'up']), \
+             patch.object(setup, 'require_server_setup'), \
+             patch.object(setup, 'run', side_effect=subprocess.CalledProcessError(1, ['docker', 'compose', 'pull'])) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                setup.main()
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][-3:], ['pull', 'minio', 'redis'])
+
+    def test_registry_preflight_precedes_build_but_is_not_needed_for_restart(self):
+        with patch('sys.argv', ['setup_server.py', 'up']), \
+             patch.object(setup, 'require_server_setup'), patch.object(setup, 'run') as run:
+            setup.main()
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(commands[0][-3:], ['pull', 'minio', 'redis'])
+        self.assertEqual(commands[1][-2:], ['pull', 'searxng'])
+        self.assertEqual(commands[2][:2], ['uv', 'sync'])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.venv/bin').mkdir(parents=True)
+            (root / '.venv/bin/python').touch()
+            with patch('sys.argv', ['setup_server.py', 'up', '--no-build']), \
+                 patch.object(setup, 'ROOT', root), patch.object(setup, 'require_server_setup'), \
+                 patch.object(setup, 'run') as run:
+                setup.main()
+            self.assertEqual(run.call_count, 2)
+            self.assertTrue(all('up' in call.args[0] and 'pull' not in call.args[0] for call in run.call_args_list))
+
     def test_private_complete_configuration_no_overwrite_and_unit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
