@@ -21,14 +21,14 @@ class SetupTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 setup.main()
         run.assert_called_once()
-        self.assertEqual(run.call_args.args[0][-3:], ['pull', 'minio', 'redis'])
+        self.assertEqual(run.call_args.args[0][-3:], ['pull', 's3', 'redis'])
 
     def test_registry_preflight_precedes_build_but_is_not_needed_for_restart(self):
         with patch('sys.argv', ['setup_server.py', 'up']), \
              patch.object(setup, 'require_server_setup'), patch.object(setup, 'run') as run:
             setup.main()
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertEqual(commands[0][-3:], ['pull', 'minio', 'redis'])
+        self.assertEqual(commands[0][-3:], ['pull', 's3', 'redis'])
         self.assertEqual(commands[1][-2:], ['pull', 'searxng'])
         self.assertEqual(commands[2][:2], ['uv', 'sync'])
         with tempfile.TemporaryDirectory() as directory:

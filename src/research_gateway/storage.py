@@ -24,7 +24,7 @@ class RedisStore:
         return await self.get_document(doc_id)
 
     async def save_document(self, doc: Document) -> Document:
-        # Redis keeps metadata/state only. Heavy content stays in MinIO.
+        # Redis keeps metadata/state only. Heavy content stays in S3 storage.
         metadata_doc = doc.model_copy(update={"markdown": None})
         pipe = self.redis.pipeline()
         pipe.set(f"doc:{doc.doc_id}", metadata_doc.model_dump_json())
@@ -119,20 +119,20 @@ class ArtifactObject:
 class ArtifactStore:
     def __init__(self) -> None:
         self.client = Minio(
-            settings.minio_endpoint,
-            access_key=settings.minio_access_key,
-            secret_key=settings.minio_secret_key,
-            secure=settings.minio_secure,
+            settings.s3_endpoint,
+            access_key=settings.s3_access_key,
+            secret_key=settings.s3_secret_key,
+            secure=settings.s3_secure,
         )
         self._ready = False
 
     def ping(self) -> bool:
-        return self.client.bucket_exists(settings.minio_bucket_raw) or True
+        return self.client.bucket_exists(settings.s3_bucket_raw) or True
 
     def ensure_buckets(self) -> None:
         if self._ready:
             return
-        for bucket in (settings.minio_bucket_raw, settings.minio_bucket_processed, settings.minio_bucket_documents):
+        for bucket in (settings.s3_bucket_raw, settings.s3_bucket_processed, settings.s3_bucket_documents):
             if not self.client.bucket_exists(bucket):
                 self.client.make_bucket(bucket)
         self._ready = True

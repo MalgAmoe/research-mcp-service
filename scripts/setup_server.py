@@ -50,7 +50,7 @@ def initialize(root, identity, host, port, search_port):
     private_write(root / '.secrets/mcp-token', secrets.token_urlsafe(48) + '\n')
     private_write(root / '.secrets/gateway-token', backend_token + '\n')
     private_write(root / '.env.control', f'GATEWAY_TOKEN={backend_token}\n')
-    private_write(root / '.env.runtime', f'TENANT_ID={identity}\nMINIO_ACCESS_KEY=mcp{secrets.token_hex(10)}\nMINIO_SECRET_KEY={secrets.token_hex(32)}\n')
+    private_write(root / '.env.runtime', f'TENANT_ID={identity}\nS3_ACCESS_KEY=mcp{secrets.token_hex(10)}\nS3_SECRET_KEY={secrets.token_hex(32)}\n')
     private_write(root / '.env.search', f'MCP_INSTANCE_ID={identity}\nMCP_SEARCH_PORT={search_port}\nSEARXNG_SECRET={secrets.token_hex(32)}\n')
     private_write(root / '.env.mcp',
         f'MCP_BIND_HOST={host}\nMCP_PORT={port}\nMCP_TOKEN_FILE=.secrets/mcp-token\n'
@@ -148,7 +148,7 @@ def main():
         if not args.no_build:
             # Fail before expensive browser builds or starting any services if
             # an upstream image is unavailable. Never substitute cached exports.
-            cmd, env = compose(); run(cmd + ['pull', 'minio', 'redis'], env)
+            cmd, env = compose(); run(cmd + ['pull', 's3', 'redis'], env)
             cmd, env = compose(True); run(cmd + ['pull', 'searxng'], env)
             run(['uv', 'sync', '--locked', '--no-dev', '--python', '3.12'])
             cmd, env = compose(); run(cmd + ['build', 'egress', 'fetch-worker', 'control'], env)

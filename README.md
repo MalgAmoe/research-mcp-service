@@ -13,7 +13,7 @@ Private single-user research service: **34 MCP tools** for search, page reading,
 | --- | --- |
 | Host MCP process | `src/research_mcp_service/server.py`, `.env.mcp` |
 | Dedicated search | `compose.search.yml`, `.env.search`, loopback port 18080 |
-| Private Redis/MinIO | `docker-compose.yml`, `.env.runtime` |
+| Private Redis/SeaweedFS S3 | `docker-compose.yml`, `.env.runtime` |
 | Network-isolated execution and egress proxy | `compose.workers.yml`, `Dockerfile.worker`, `Dockerfile.egress` |
 | Authenticated storage/control gateway | `compose.control.yml`, `Dockerfile.control`, `.env.control` |
 

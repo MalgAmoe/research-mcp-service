@@ -40,7 +40,7 @@ class HostRetentionTests(unittest.TestCase):
     def test_both_layouts_and_shell_project_overrides(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / '.env.runtime').write_text('TENANT_ID=own\nMINIO_SECRET_KEY=test\n')
+            (root / '.env.runtime').write_text('TENANT_ID=own\nS3_SECRET_KEY=test\n')
             for setting in ['', 'MCP_GATEWAY_SOCKET=/private/control.sock\n']:
                 (root / '.env.mcp').write_text(setting)
                 with patch.dict('os.environ', {'TENANT_ID': 'other', 'COMPOSE_PROJECT_NAME': 'other'}):

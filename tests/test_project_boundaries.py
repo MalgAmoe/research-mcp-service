@@ -49,8 +49,8 @@ class ProjectBoundaryTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable; daemon not needed')
     def test_compose_has_private_project_scoped_storage(self):
         env = {key: value for key, value in os.environ.items() if not key.startswith('COMPOSE_')}
-        env.update(TENANT_ID='offline-tests', MINIO_ACCESS_KEY='test-only-user',
-                   MINIO_SECRET_KEY='test-only-not-for-deployment', SEARXNG_SECRET='test-only-not-for-deployment')
+        env.update(TENANT_ID='offline-tests', S3_ACCESS_KEY='test-only-user',
+                   S3_SECRET_KEY='test-only-not-for-deployment', SEARXNG_SECRET='test-only-not-for-deployment')
         raw = subprocess.check_output(['docker', 'compose', '--env-file', os.devnull,
             '-f', str(ROOT / 'docker-compose.yml'), 'config', '--format', 'json'],
             cwd=ROOT, env=env, text=True)

@@ -333,13 +333,13 @@ async def read_url(req: ReadUrlRequest) -> Document:
         raw_uri = None
         if raw_html is not None:
             raw_uri = artifact_store.put_text(
-                settings.minio_bucket_raw,
+                settings.s3_bucket_raw,
                 f"{doc_id}.html",
                 raw_html,
                 "text/html; charset=utf-8",
             )
         markdown_uri = artifact_store.put_text(
-            settings.minio_bucket_processed,
+            settings.s3_bucket_processed,
             f"{doc_id}.md",
             markdown,
             "text/markdown; charset=utf-8",
@@ -790,7 +790,7 @@ async def convert_document(req: ConvertDocumentRequest) -> ConvertedDocument:
 
     try:
         original_uri = artifact_store.put_bytes(
-            settings.minio_bucket_documents,
+            settings.s3_bucket_documents,
             f"{doc_id}{suffix}",
             data,
             content_type or "application/octet-stream",
@@ -805,7 +805,7 @@ async def convert_document(req: ConvertDocumentRequest) -> ConvertedDocument:
         ) from exc
 
     markdown_uri = artifact_store.put_text(
-        settings.minio_bucket_processed,
+        settings.s3_bucket_processed,
         f"{doc_id}.md",
         markdown,
         "text/markdown; charset=utf-8",

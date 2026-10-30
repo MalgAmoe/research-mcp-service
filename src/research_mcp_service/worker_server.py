@@ -130,7 +130,7 @@ def main():
         raise SystemExit('Worker refuses to start with a non-loopback network interface')
     if os.environ.get('FETCH_PROXY') != 'http://127.0.0.1:3128':
         raise SystemExit('Worker requires its fixed egress bridge')
-    if any(os.environ.get(key) for key in ['MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'REDIS_URL', 'MCP_TOKEN_FILE', 'WORKER_SOCKET']):
+    if any(os.environ.get(key) for key in ['S3_ACCESS_KEY', 'S3_SECRET_KEY', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'REDIS_URL', 'MCP_TOKEN_FILE', 'WORKER_SOCKET']):
         raise SystemExit('Worker must not receive storage/control credentials or endpoints')
     path = Path('/rpc/worker.sock')
     if path.exists():

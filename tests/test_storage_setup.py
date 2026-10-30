@@ -20,7 +20,7 @@ class StorageSetupTests(unittest.TestCase):
             a = dict(line.split('=', 1) for line in first.read_text().splitlines())
             b = dict(line.split('=', 1) for line in second.read_text().splitlines())
             self.assertEqual(a['TENANT_ID'], 'dev')
-            for key in ['MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'SEARXNG_SECRET']:
+            for key in ['S3_ACCESS_KEY', 'S3_SECRET_KEY', 'SEARXNG_SECRET']:
                 self.assertNotEqual(a[key], b[key])
                 self.assertGreaterEqual(len(a[key]), 20)
             before = first.read_bytes()
@@ -31,7 +31,7 @@ class StorageSetupTests(unittest.TestCase):
     def test_invalid_identity_creates_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config'
-            for identity in ['', '../personal', 'DEV', 'x\nMINIO_SECRET_KEY=x', 'a' * 33, '-dev']:
+            for identity in ['', '../personal', 'DEV', 'x\nS3_SECRET_KEY=x', 'a' * 33, '-dev']:
                 with self.subTest(identity=identity), self.assertRaises(ValueError):
                     setup.initialize(path, identity)
                 self.assertFalse(path.exists())

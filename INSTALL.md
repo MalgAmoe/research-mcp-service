@@ -66,9 +66,9 @@ echo $! > .state/setup.pid
 python3 scripts/setup_server.py status
 ```
 
-Before dependency installation or browser builds, `up` pulls the configured MinIO, Redis and SearXNG images. If a pull fails, it stops without starting services or copying/substituting an image.
+Before dependency installation or browser builds, `up` pulls the configured SeaweedFS, Redis and SearXNG images. If a pull fails, it stops without starting services or copying/substituting an image.
 
-**MinIO prerequisite:** `minio/minio:RELEASE.2025-09-07T16-13-09Z` was unavailable from Docker Hub and Quay at the last check. Verify an accessible image source before a fresh installation. Setup stops on pull failure; it does not copy or substitute images.
+Artifact storage uses SeaweedFS **4.51**, pinned by release tag and digest. Its `s3` service runs non-root with a read-only root filesystem and a separate `s3_data` volume. S3 and administrative interfaces are confined to the internal storage network; no storage ports are published. Telemetry, the admin UI and WebDAV are disabled. Physical reclamation of already-deleted objects is asynchronous; it does not expire live artifacts.
 
 `up` starts the dedicated search project and this instance's storage/egress/worker/control project. Generated images and volumes are instance-scoped. Build/install failures stop the command; already-started components are left in place for inspection, not purged. `up --no-build` starts previously provisioned images without dependency synchronization or the explicit registry preflight; it is intended for restarts, not as a workaround for an incomplete fresh installation.
 
@@ -82,7 +82,7 @@ From another terminal:
 
 ```sh
 .venv/bin/python scripts/check_install.py
-# Optional: public search/page acquisition, MinIO write/read, and one Chromium session:
+# Optional: public search/page acquisition, S3 write/read, and one Chromium session:
 .venv/bin/python scripts/check_install.py --live
 ```
 
@@ -114,7 +114,9 @@ docker compose --env-file .env.runtime -f docker-compose.yml -f compose.workers.
 
 ## Updates, recovery and data
 
-Coordinate downtime: worker recreation expires browser sessions. Back up private configuration and Redis/MinIO volumes before significant changes; this workflow does not implement automated backups or migrations. Use a consistent stopped-storage backup rather than copying live database files. Preserve the matching credentials with any volume backup.
+**Existing MinIO installations:** this release changes storage to SeaweedFS and configuration to `S3_ACCESS_KEY` / `S3_SECRET_KEY` (control uses `S3_ENDPOINT`, `S3_SECURE` and optional `S3_BUCKET_*`). It does not convert or reuse MinIO volumes. Do not update/recreate a valuable installation until a separate S3 copy/verification or an explicitly approved clean reset has been arranged. Do not mount old MinIO data into SeaweedFS.
+
+Coordinate downtime: worker recreation expires browser sessions. Back up private configuration and Redis/S3 volumes before significant changes; this workflow does not implement automated backups or migrations. Use a consistent stopped-storage backup rather than copying live database files. Preserve the matching credentials with any volume backup.
 
 For an update, coordinate downtime, check `git status --short` and record `git rev-parse HEAD`. Stop MCP, run `git pull --ff-only`, then `python3 scripts/setup_server.py up`, restart MCP and rerun checks. Do not discard local changes or reset a divergent checkout automatically. The Unix endpoint path remains stable across container recreation; no IP edits are needed. Never run initialization over existing data or use `down -v` as routine cleanup. A rollback may require the previous source/image and compatible data backup; this script does not claim automatic transactional rollback.
 
@@ -142,14 +144,16 @@ Cleanup also removes stale URL/recent/RSS indexes and old unreferenced artifacts
 
 The launcher refuses a missing/running/paused/restarting control. It checks again **after** the maintenance process holds the Redis lock, before authorizing deletion. A restarted control rejects ordinary requests while that lock exists. Other direct-storage clients cannot honor this guard: `--writers-stopped` is your explicit confirmation about them. An old control image rejects the guard protocol before deletion; rebuild it rather than bypassing the launcher.
 
-Redis and MinIO deletion is not atomic. Failure after deletion starts, or a killed maintenance process, leaves the non-expiring maintenance lock in place. Keep writers stopped. Verify no maintenance/pin process is active, inspect the error and partial state, and only then explicitly clear `retention:maintenance_lock` in this deployment's Redis and rerun the approved cleanup. There is intentionally no automatic unlock/restart. A failure before any deletion releases its lock normally.
+Redis and S3 deletion is not atomic. Failure after deletion starts, or a killed maintenance process, leaves the non-expiring maintenance lock in place. Keep writers stopped. Verify no maintenance/pin process is active, inspect the error and partial state, and only then explicitly clear `retention:maintenance_lock` in this deployment's Redis and rerun the approved cleanup. There is intentionally no automatic unlock/restart. A failure before any deletion releases its lock normally.
 
-No cleanup timer or automatic deletion is installed. Do not add independent Redis TTLs or MinIO lifecycle rules: those would bypass coordinated deletion and pin protection.
+No cleanup timer or automatic deletion is installed. Do not add independent Redis TTLs or S3 lifecycle rules: those would bypass coordinated deletion and pin protection.
 
 ## Verification status
 
-Tested on Ubuntu 24.04.5 x86-64, 4 vCPU / 8 GB RAM: application/browser builds, private Unix control, systemd startup, live search, document storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run. MinIO was available from a cached official image, not a successful registry pull.
+The existing MinIO-based VPS was tested on Ubuntu 24.04.5 x86-64, 4 vCPU / 8 GB RAM: application/browser builds, private Unix control, systemd startup, live search, document storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run. That VPS has not been switched to SeaweedFS.
+
+SeaweedFS 4.51 was pulled and tested locally with non-root/read-only execution, artifact integrity, wrong-credential rejection, process-crash recovery, stopped-storage backup/restore, an adjacent-release upgrade and the application's S3 storage operations. These checks do not establish host-power-loss durability.
 
 VPS reboot recovery is verified: the service and containers resumed automatically, and cached document retrieval, acquisition and Chromium checks passed. Provider-specific boot configuration is recorded in the deployment's private operations notes.
 
-Still to verify: an accessible MinIO image source for fresh installs and destructive retention on disposable test data.
+Still to verify: the complete fresh-server workflow with SeaweedFS and destructive coordinated retention on disposable test data.

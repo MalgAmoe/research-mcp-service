@@ -16,13 +16,13 @@ class Settings:
     )
     ddgs_region: str = os.getenv("DDGS_REGION", "us-en")
     redis_url: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
-    minio_endpoint: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    minio_access_key: str = os.getenv("MINIO_ACCESS_KEY", "")
-    minio_secret_key: str = os.getenv("MINIO_SECRET_KEY", "")
-    minio_secure: bool = os.getenv("MINIO_SECURE", "false").lower() == "true"
-    minio_bucket_raw: str = os.getenv("MINIO_BUCKET_RAW", "web-raw")
-    minio_bucket_processed: str = os.getenv("MINIO_BUCKET_PROCESSED", "web-processed")
-    minio_bucket_documents: str = os.getenv("MINIO_BUCKET_DOCUMENTS", "web-documents")
+    s3_endpoint: str = os.getenv("S3_ENDPOINT", "s3:8333")
+    s3_access_key: str = os.getenv("S3_ACCESS_KEY", "")
+    s3_secret_key: str = os.getenv("S3_SECRET_KEY", "")
+    s3_secure: bool = os.getenv("S3_SECURE", "false").lower() == "true"
+    s3_bucket_raw: str = os.getenv("S3_BUCKET_RAW", "web-raw")
+    s3_bucket_processed: str = os.getenv("S3_BUCKET_PROCESSED", "web-processed")
+    s3_bucket_documents: str = os.getenv("S3_BUCKET_DOCUMENTS", "web-documents")
 
 
 settings = Settings()

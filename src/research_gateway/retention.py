@@ -67,7 +67,7 @@ def inventory(redis, artifacts, days=30, rss_days=90):
     retained_refs = set().union(*(refs(doc) for key, doc in docs.items() if key not in expired))
     expired_refs = set().union(*(refs(docs[key]) for key in expired))
     objects = []
-    for bucket in {settings.minio_bucket_raw, settings.minio_bucket_processed, settings.minio_bucket_documents}:
+    for bucket in {settings.s3_bucket_raw, settings.s3_bucket_processed, settings.s3_bucket_documents}:
         if not artifacts.client.bucket_exists(bucket):
             continue
         if artifacts.client.get_bucket_versioning(bucket).status in {'Enabled', 'Suspended'}:

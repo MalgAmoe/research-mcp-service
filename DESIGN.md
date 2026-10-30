@@ -8,7 +8,7 @@ Current scope: one private owner, authenticated MCP over Tailscale/loopback. Sev
 Client → bearer-authenticated MCP process
   ├─ search → disposable search process → dedicated SearXNG / DDGS
   └─ fixed-origin authenticated control gateway
-       ├─ Redis / MinIO on internal storage network
+       ├─ Redis / SeaweedFS S3 on internal storage network
        └─ read-only Unix RPC mount → execution worker (network_mode: none)
                                      └─ loopback bridge → Unix egress proxy
                                                           └─ public HTTP(S)
@@ -34,7 +34,7 @@ Main-content extraction remains imperfect. Standard Markdown favors structure; l
 
 ## Data and operations
 
-Redis retains metadata; MinIO retains artifacts. Refresh updates URL lookup and may replace content under an existing ID; document IDs are cache handles, not archival guarantees. Retention/pinning code remains useful maintenance functionality, not dead code. Cleanup must coordinate writers and preserve pinned/shared artifacts; automatic retention, quotas, backup orchestration and account deletion are not deployed.
+Redis retains metadata; SeaweedFS retains artifacts through S3. Each deployment has its own storage volume. The Python MinIO client is used as an S3 client, not as a storage server dependency. Refresh updates URL lookup and may replace content under an existing ID; document IDs are cache handles, not archival guarantees. Retention/pinning code remains useful maintenance functionality, not dead code. Cleanup must coordinate writers and preserve pinned/shared artifacts; automatic retention, quotas, backup orchestration and account deletion are not deployed.
 
 Runtime configuration/secrets, cached evidence and data volumes must survive repository cleanup. The original personal gateway is unrelated to this deployment and must remain untouched. Source provenance is recorded in ORIGIN.md.
 

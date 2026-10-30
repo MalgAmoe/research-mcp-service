@@ -73,7 +73,7 @@ async def capabilities() -> dict[str, object]:
             "fallbacks": ["ddgs"] if settings.search_provider == "auto" else [],
         },
         "batch_fetch": {"max_urls": 15, "max_concurrency": 10, "default_concurrency": 5},
-        "storage": ["redis", "minio"],
+        "storage": ["redis", "s3"],
         "browser_profiles": {
             "standard": "Playwright Chromium; use with strategy=browser",
             "stealth": "Camoufox; set strategy=browser AND browser_profile=stealth",
@@ -106,9 +106,9 @@ async def health_dependencies() -> dict[str, str]:
         status["redis"] = f"error: {exc}"
     try:
         artifact_store.ensure_buckets()
-        status["minio"] = "ok"
+        status["s3"] = "ok"
     except Exception as exc:
-        status["minio"] = f"error: {exc}"
+        status["s3"] = f"error: {exc}"
     return status
 
 

@@ -1,14 +1,23 @@
 import asyncio
+import os
 import signal
 import unittest
 from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from research_mcp_service.worker_server import create_worker_app, run_job
+from research_mcp_service.worker_server import create_worker_app, run_job, main
 
 
 class WorkerServerTests(unittest.IsolatedAsyncioTestCase):
+    def test_worker_refuses_s3_credentials(self):
+        for key in ['S3_ACCESS_KEY', 'S3_SECRET_KEY']:
+            with self.subTest(key=key), \
+                 patch.dict(os.environ, {key: 'test-only', 'FETCH_PROXY': 'http://127.0.0.1:3128'}, clear=True), \
+                 patch('research_mcp_service.worker_server.socket.if_nameindex', return_value=[(1, 'lo')]):
+                with self.assertRaisesRegex(SystemExit, 'storage/control credentials'):
+                    main()
+
     async def test_validation_and_success(self):
         executor = AsyncMock(return_value={'result': {'markdown': 'read'}})
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_worker_app(executor)), base_url='http://worker') as client:
