@@ -13,7 +13,11 @@ Both expose 34 tools and have separate credentials, caches and browser sessions.
 
 Both installations now use SeaweedFS 4.51. Each received a separately approved clean cache reset; old MinIO/cache volumes were removed. The VPS has migrated to the image-only Compose workflow; the local installation still uses its existing host frontend. VPS endpoint and bearer token were preserved; SSH, TLS/renewal and Hermes were unchanged.
 
-## Local development operations
+## Legacy local operations — existing installation only
+
+Fresh installations use `compose.deploy.yml` and `scripts/setup_server.py` as documented in INSTALL.md. Do not use the commands below as a new-server setup or run initialization over the current local files.
+
+The existing local layout still needs `docker-compose.yml`, `compose.workers.yml`, `compose.control.yml` and `compose.search.yml`. Component initializers and older host-socket support (`compose.server.yml`) remain compatibility code, not the recommended deployment path. Keep their tests until a separately coordinated migration allows their removal.
 
 - MCP configuration: `.env.mcp`; PID/log: `.state/mcp.pid`, `.state/mcp.log`.
 - Control credentials: `.env.control`, `.secrets/gateway-token`.
@@ -32,7 +36,6 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 ## Verification
 
 - Local SeaweedFS deployment: 34-tool discovery, S3 capabilities, live search/page acquisition, artifact storage/retrieval, Chromium, Camoufox and retention dry run passed. Worker/control containers rebuilt; storage remains private.
-- VPS: application/browser builds, 119 offline tests, live search, page storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run checked.
 - Image-only candidate `candidate-20261030-181946`: 134 offline tests pass. All three images were published to `malgamoe/mcps` and pulled anonymously by exact digest in a disposable Ubuntu VM. Two independent Compose deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation, and frontend denial of the other owner's storage network. No host application virtualenv or application systemd unit was used.
 - Both Compose stacks recovered after a VM reboot without provisioning: saved evidence remained available, old browser handles expired, and fresh browser/API checks passed. This tested loopback publishing, not Tailnet address ordering at boot.
 - Generated HTTPS routes passed trusted **test-CA** TLS, bearer/Host/Origin rejection and unknown-path checks. This is not new public ACME or certificate-renewal verification. RSS subscription and cached-entry isolation passed with the Django weblog feed; an initial Python feed fetch failed and was not diagnosed.
@@ -54,6 +57,6 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 
 Local deployment/checks: `.state/deploy-seaweed/build.log`, `.state/deploy-seaweed/finish.log`, `.state/deploy-seaweed/tests.log`.
 Retention: `.state/deploy-seaweed/retention-dry-run.log`.
-MCP/worker source snapshot: `sha256:dfdf7b759f33a1b8eda861d2611907462043581096d81d45ea6efde3a5436f6a`.
+Legacy local MCP/worker source snapshot: `sha256:dfdf7b759f33a1b8eda861d2611907462043581096d81d45ea6efde3a5436f6a`.
 Image-only candidate: `.state/compose-release/{tests-final,build,publish-public,pull-vm,start-vm,isolation-reboot,extra-retry}.log`. The initial RSS fixture failure is retained in `extra.log`. Completed one-off harness/scripts were removed after verification; only stopped-VM management metadata and selected evidence remain privately. See `.state/README.md` for the retained layout.
 VPS: locations recorded in `.state/CONTABO.md`.

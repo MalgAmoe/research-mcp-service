@@ -1,9 +1,10 @@
 # Research MCP Service
 
-Private single-user research service: **34 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale. **Not a public or multi-user production service.**
+Research service with **34 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
 
 - [LIVE-STATUS.md](LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
-- [INSTALL.md](INSTALL.md): fresh private-server setup, stable Unix control socket and optional boot service.
+- [INSTALL.md](INSTALL.md): image-only Compose installation, verified image digests, startup and maintenance.
+- [HTTPS.md](HTTPS.md): optional public TLS and separate endpoint paths.
 - [DESIGN.md](DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
@@ -11,13 +12,15 @@ Private single-user research service: **34 MCP tools** for search, page reading,
 
 | Component | Source / deployment |
 | --- | --- |
-| Host MCP process | `src/research_mcp_service/server.py`, `.env.mcp` |
-| Dedicated search | `compose.search.yml`, `.env.search`, loopback port 18080 |
-| Private Redis/SeaweedFS S3 | `docker-compose.yml`, `.env.runtime` |
-| Network-isolated execution and egress proxy | `compose.workers.yml`, `Dockerfile.worker`, `Dockerfile.egress` |
-| Authenticated storage/control gateway | `compose.control.yml`, `Dockerfile.control`, `.env.control` |
+| MCP frontend, control and one-time credential setup | Shared app image built from `Dockerfile.control`, separate containers/permissions |
+| Chromium/Camoufox and document execution | Worker image built from `Dockerfile.worker`, network-none |
+| Restricted web-access proxy | Egress image built from `Dockerfile.egress` |
+| Dedicated search | Pinned upstream SearXNG image |
+| Private metadata and artifacts | Pinned upstream Redis and SeaweedFS images |
 
-The base Compose file starts storage only. Browsers must not receive storage credentials or join the storage network.
+**`compose.deploy.yml` is the default deployment entry point.** `scripts/setup_server.py` initializes private configuration and operates the stack using published images from `malgamoe/mcps`; no host application virtualenv or application systemd unit is needed. Only MCP publishes a port. Browsers receive no storage credentials or storage-network access; no application has Docker access.
+
+Follow [INSTALL.md](INSTALL.md) for a fresh administrator-owned deployment. The VPS uses this layout. The existing local installation still uses the older host-runtime layout described in LIVE-STATUS.md; do not initialize over it.
 
 ## Tools and behavior
 
@@ -44,17 +47,13 @@ uv sync --locked --no-dev
 
 Offline tests exercise the production text-only MCP format, search → batch research orchestration, extraction/presentation regressions, storage maintenance and runtime safety boundaries. Tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
 
-The fresh deployment workflow in [INSTALL.md](INSTALL.md) uses `compose.deploy.yml` for the entire stack and a small administrative setup helper. It pulls versioned images rather than building browsers or installing a host application environment. Each owner has separate credentials, networks and volumes; no application has Docker access. [HTTPS.md](HTTPS.md) covers optional public TLS and separate endpoint paths. The published candidate passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM; see INSTALL.md for verified image digests and test limits. Existing installations are not automatically converted.
+The published images passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM, followed by a clean VPS installation. See LIVE-STATUS.md for exact verification and limits; these checks are not a production soak.
 
-Older component-level configuration helpers: `scripts/init_mcp.py`, `scripts/init_search.py`, `scripts/init_storage.py`. They refuse to overwrite existing configuration. Full runtime setup additionally requires a private random `GATEWAY_TOKEN` in `.env.control` and the matching mode-0600 `.secrets/gateway-token`. Never copy credentials from another service. See LIVE-STATUS for the existing deployment rather than rerunning initialization.
+Clients use their configured MCP URL and `Authorization: Bearer <token>` in protected client settings. Reconnect after schema changes. `health` checks MCP connectivity, not backend health. Never copy credentials between independent deployments.
 
-MCP startup:
+### Legacy local compatibility
 
-```sh
-uv run --locked --env-file .env.mcp python -m research_mcp_service.server
-```
-
-Clients use the configured Tailnet URL and `Authorization: Bearer <token>` in protected client settings. Bearer authentication only; public HTTPS setup is covered in HTTPS.md. Reconnect clients after schema changes. `health` checks MCP connectivity, not backend health. The existing local MCP process is manually managed with `.state/mcp.pid` / `.state/mcp.log`, not installed as a boot service.
+The older Compose overlays, `scripts/init_{mcp,search,storage}.py` and their compatibility tests remain while the existing local host-runtime installation is still in use. They are **not the fresh-install workflow**. Its commands and active PID/log locations are confined to LIVE-STATUS.md. Removing that machinery requires a separately coordinated local migration; repository cleanup must not break the running service.
 
 Preserve `.env*`, `.secrets/`, `.state/` evidence and Docker data volumes. Never print secrets or use `docker compose down -v` as cleanup. Manual cache retention is available through `python3 scripts/retention.py` (read-only dry run by default); see INSTALL.md for pinning, stopped-writer checks and failure recovery. No automatic retention is enabled. Do not restart workers while users are testing without coordinating the interruption.
 
