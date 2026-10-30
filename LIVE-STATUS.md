@@ -55,5 +55,5 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 Local deployment/checks: `.state/deploy-seaweed/build.log`, `.state/deploy-seaweed/finish.log`, `.state/deploy-seaweed/tests.log`.
 Retention: `.state/deploy-seaweed/retention-dry-run.log`.
 MCP/worker source snapshot: `sha256:dfdf7b759f33a1b8eda861d2611907462043581096d81d45ea6efde3a5436f6a`.
-Image-only candidate: `.state/compose-release/{tests,build,publish-public,pull-vm,start-vm,isolation-reboot,extra-retry}.log`. The initial RSS fixture failure is retained in `extra.log`. The one-off VM test harness is private and is not shipped in the repository.
+Image-only candidate: `.state/compose-release/{tests-final,build,publish-public,pull-vm,start-vm,isolation-reboot,extra-retry}.log`. The initial RSS fixture failure is retained in `extra.log`. Completed one-off harness/scripts were removed after verification; only stopped-VM management metadata and selected evidence remain privately. See `.state/README.md` for the retained layout.
 VPS: locations recorded in `.state/CONTABO.md`.
