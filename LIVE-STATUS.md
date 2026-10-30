@@ -7,11 +7,11 @@ Setup and maintenance commands: [INSTALL.md](INSTALL.md). Architecture: [DESIGN.
 | Installation | Source revision | MCP access | Control connection | Startup |
 |---|---|---|---|---|
 | Local development | d3bbb97 | `http://100.69.41.80:8766/mcp`, bearer authentication | Internal container TCP | Background process |
-| Ubuntu VPS | 3ca1223 | HTTPS reverse proxy, bearer authentication; backend loopback | Private Unix socket | Enabled user-systemd service |
+| Ubuntu VPS | a44b645 | Same HTTPS endpoint/bearer; backend loopback | Named Unix-socket volume | Full Compose stack / Docker restart policies |
 
 Both expose 34 tools and have separate credentials, caches and browser sessions. The original personal gateway is a separate service.
 
-Local storage uses SeaweedFS 4.51 with fresh S3/Redis data; old local cache IDs are no longer available. Its MinIO container/volume were removed. The VPS still uses its existing MinIO deployment and has not received these source/configuration changes.
+Both installations now use SeaweedFS 4.51. Each received a separately approved clean cache reset; old MinIO/cache volumes were removed. The VPS has migrated to the image-only Compose workflow; the local installation still uses its existing host frontend. VPS endpoint and bearer token were preserved; SSH, TLS/renewal and Hermes were unchanged.
 
 ## Local development operations
 
@@ -36,15 +36,16 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 - Image-only candidate `candidate-20261030-181946`: 134 offline tests pass. All three images were published to `malgamoe/mcps` and pulled anonymously by exact digest in a disposable Ubuntu VM. Two independent Compose deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation, and frontend denial of the other owner's storage network. No host application virtualenv or application systemd unit was used.
 - Both Compose stacks recovered after a VM reboot without provisioning: saved evidence remained available, old browser handles expired, and fresh browser/API checks passed. This tested loopback publishing, not Tailnet address ordering at boot.
 - Generated HTTPS routes passed trusted **test-CA** TLS, bearer/Host/Origin rejection and unknown-path checks. This is not new public ACME or certificate-renewal verification. RSS subscription and cached-entry isolation passed with the Django weblog feed; an initial Python feed fetch failed and was not diagnosed.
-- Disposable-fixture retention rejected running writers, honored pins, deleted the selected Redis metadata and S3 objects, released its lock, and preserved subscriptions/cached RSS. Alpha stop/cleanup/restart left beta's saved data and live browser usable. Neither working installation received the new workflow.
-- VPS reboot recovery verified: SSH returned in 22 seconds, HTTPS/MCP in 38 seconds; cached document retrieval, search call and Chromium passed afterward. No failed system services; a provider cloud-init deprecation warning remains.
+- Disposable-fixture retention rejected running writers, honored pins, deleted the selected Redis metadata and S3 objects, released its lock, and preserved subscriptions/cached RSS. Alpha stop/cleanup/restart left beta's saved data and live browser usable. The VPS subsequently received the verified workflow through an approved clean reset; the local installation was not migrated.
+- VPS clean Compose migration: all containers healthy, 34 tools, search call, acquisition/artifact readback, Chromium/Camoufox and existing public HTTPS/authentication passed. Old MCP/search containers and cache volumes were removed after ownership checks; the host application unit is disabled. A fresh retention dry run passed.
+- VPS host/network reboot fixes were verified previously with the old application layout (SSH 22s, MCP 38s). **The new VPS stack has not yet been reboot-tested on that host**; its reboot checks were in the disposable VM. No VPS reboot was performed during migration.
 - VPS public TLS, bearer rejection and certificate-renewal/reload dry run passed. Renewal checks run every six hours.
 - Destructive retention on production data and power-loss durability remain untested; the deletion check used only a deliberately aged disposable fixture.
 - Search providers can return degraded results; request diagnostics when investigating coverage or failures.
 
 ## Operational limits
 
-- Fresh installs use digest-pinned SeaweedFS. The Compose workflow was verified in a disposable local Ubuntu VM, not a newly provisioned public VPS or a production soak. Existing MinIO installations need an explicit migration or approved reset before updating; see INSTALL.md.
+- Fresh installs use digest-pinned SeaweedFS. The Compose workflow was verified in a disposable local Ubuntu VM and then freshly installed on the existing VPS. This is not a production soak. Existing MinIO installations need an explicit migration or approved reset before updating; see INSTALL.md.
 - Automatic cleanup is disabled. Use `python3 scripts/retention.py` for a read-only inventory; apply requires stopped writers and the guarded maintenance workflow in INSTALL.md.
 - Cache IDs are not archives; refresh can replace cached content. Export irreplaceable evidence separately.
 - Browser observations and successful extraction do not certify completeness or readiness. Full backend document retrieval still has a 2 MiB ceiling before passage slicing.
