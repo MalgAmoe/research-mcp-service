@@ -2,7 +2,9 @@
 
 One owner per stack. Docker runs the MCP frontend, search, control, browser worker, egress proxy, Redis and S3 storage. There is **no host application virtualenv, application systemd unit or runtime Docker access**. Docker administrators remain trusted. Optional public TLS: [HTTPS.md](HTTPS.md).
 
-**Verified candidate:** `candidate-20261030-181946` (Linux amd64), published publicly in `malgamoe/mcps`. Two separate deployments passed live API/browser, owner-isolation, reboot, test-CA HTTPS and guarded retention checks in one disposable Ubuntu VM. This is not a production soak or public ACME test. Running installations remain unchanged; see [LIVE-STATUS.md](LIVE-STATUS.md).
+**Verified candidate:** `candidate-20261030-181946` (Linux amd64), published publicly in `malgamoe/mcps`. Two separate deployments passed live API/browser, owner-isolation, reboot, test-CA HTTPS and guarded retention checks in one disposable Ubuntu VM. This is not a production soak or public ACME test. Both the local and VPS installations now use this deployment; see [LIVE-STATUS.md](LIVE-STATUS.md).
+
+Commands below run from the repository root, not the `docs/` directory.
 
 ## Prerequisites
 

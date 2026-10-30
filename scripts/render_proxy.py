@@ -101,7 +101,7 @@ def main():
         os.replace(temporary, setup.REGISTRY / f'{identity}.json')
         for path, text in files:
             setup.private_write(path, text)
-    print('Generated .state/' + identity + '.{http,location}.conf. Review HTTPS.md before installing. No nginx changes applied.')
+    print('Generated .state/' + identity + '.{http,location}.conf. Review docs/HTTPS.md before installing. No nginx changes applied.')
 
 
 if __name__ == '__main__':

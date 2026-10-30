@@ -1,5 +1,5 @@
 # Render with envsubst '${PUBLIC_HOST}' only, preserving nginx's own variables.
-# Include per-instance *.http.conf globally ONCE, as described in HTTPS.md.
+# Include per-instance *.http.conf globally ONCE, as described in docs/HTTPS.md.
 server {
     listen 80;
     listen [::]:80;

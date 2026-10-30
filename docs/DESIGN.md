@@ -1,6 +1,6 @@
 # Runtime design and boundaries
 
-Current scope: one owner per independent deployment, authenticated MCP over loopback/Tailscale or optional HTTPS. Clients with the same token share that owner's cache and browser worker. There is no shared-application tenant router or OAuth; this is not a general multi-user hosting security claim. See [README.md](README.md) for tools and [LIVE-STATUS.md](LIVE-STATUS.md) for operations and verification.
+Current scope: one owner per independent deployment, authenticated MCP over loopback/Tailscale or optional HTTPS. Clients with the same token share that owner's cache and browser worker. There is no shared-application tenant router or OAuth; this is not a general multi-user hosting security claim. See [README.md](../README.md) for tools and [LIVE-STATUS.md](LIVE-STATUS.md) for operations and verification.
 
 ## Execution paths
 
