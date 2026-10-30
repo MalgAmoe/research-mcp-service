@@ -49,6 +49,20 @@ class HostRetentionTests(unittest.TestCase):
                 self.assertNotIn('TENANT_ID', env)
                 self.assertNotIn('COMPOSE_PROJECT_NAME', env)
 
+    def test_image_only_layout_and_frontend_stop_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.env.runtime').write_text('DEPLOYMENT_LAYOUT=compose-v1\nTENANT_ID=own\n')
+            (root / '.env.mcp').write_text('MCP_GATEWAY_SOCKET=/control-api/gateway.sock\n')
+            with patch.dict('os.environ', {'DOCKER_HOST': 'tcp://other:2375'}):
+                command, env = host.deployment(root)
+            self.assertIn('compose.deploy.yml', command)
+            self.assertNotIn('compose.server.yml', command)
+            self.assertNotIn('DOCKER_HOST', env)
+            self.assertIn('unix:///var/run/docker.sock', command)
+        with self.assertRaisesRegex(RuntimeError, 'MCP must be stopped'):
+            host.check_stopped([{'Service': 'control', 'State': 'exited'}, {'Service': 'mcp', 'State': 'running'}])
+
     def test_dry_run_never_checks_or_stops_writers(self):
         with patch.object(host.subprocess, 'run') as run, patch.object(host, 'require_stopped_control') as check:
             host.run_retention(['docker', 'compose'], Path('/tmp'), {}, [])

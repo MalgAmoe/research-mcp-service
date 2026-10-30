@@ -1,0 +1,203 @@
+# Complete image-only deployment. No host Python environment, application
+# systemd unit, Docker socket mount, or host-wide application account required.
+name: research-mcp-${TENANT_ID:?Initialize a unique instance first}
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+x-app: &app
+  image: ${MCP_APP_IMAGE:?Set the versioned application image}
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  init: true
+  restart: unless-stopped
+  logging: *logging
+  tmpfs: ["/tmp:size=67108864,mode=1777"]
+
+services:
+  credentials:
+    <<: *app
+    user: "0:0"
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    network_mode: none
+    restart: "no"
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 32
+    command: [python, -m, research_mcp_service.container_credentials]
+    volumes:
+      - type: bind
+        source: ./.secrets/mcp-token
+        target: /inputs/mcp-token
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/gateway-token
+        target: /inputs/gateway-token
+        read_only: true
+        bind: {create_host_path: false}
+      - frontend_credentials:/credentials
+
+  mcp:
+    <<: *app
+    networks: [frontend]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    command: [python, -m, research_mcp_service.container_frontend]
+    env_file: [.env.mcp]
+    environment:
+      MCP_LISTEN_HOST: 0.0.0.0
+      MCP_LISTEN_PORT: "8766"
+      MCP_TOKEN_FILE: /credentials/mcp-token
+      MCP_GATEWAY_TOKEN_FILE: /credentials/gateway-token
+      MCP_GATEWAY_SOCKET: /control-api/gateway.sock
+      SEARXNG_URL: http://searxng:8080
+    ports:
+      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_PORT:-8766}:8766"
+    volumes:
+      - frontend_credentials:/credentials:ro
+      - control_api:/control-api:ro
+    depends_on:
+      credentials: {condition: service_completed_successfully}
+      control: {condition: service_healthy}
+      searxng: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import os,http.client; from pathlib import Path; c=http.client.HTTPConnection('127.0.0.1',8766,timeout=3); c.request('GET','/mcp',headers={'Host':os.environ['MCP_BIND_HOST']+':'+os.environ['MCP_PORT'],'Accept':'text/event-stream','Authorization':'Bearer '+Path('/credentials/mcp-token').read_text().strip()}); assert c.getresponse().status in (200,405); c.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 190s
+
+  control:
+    <<: *app
+    networks: [storage]
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 128
+    command: [python, -m, research_mcp_service.gateway_server]
+    env_file: [.env.control]
+    environment:
+      GATEWAY_SOCKET: /control-api/gateway.sock
+      WORKER_SOCKET: /rpc/worker.sock
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: s3:8333
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set unique S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set unique S3_SECRET_KEY}
+      S3_SECURE: "false"
+    volumes:
+      - worker_rpc:/rpc:ro
+      - control_api:/control-api
+    depends_on:
+      redis: {condition: service_healthy}
+      s3: {condition: service_healthy}
+      fetch-worker: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import os,httpx; c=httpx.Client(transport=httpx.HTTPTransport(uds='/control-api/gateway.sock'),base_url='http://control',timeout=3); r=c.get('/health',headers={'Authorization':'Bearer '+os.environ['GATEWAY_TOKEN']}); r.raise_for_status(); c.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  fetch-worker:
+    <<: *app
+    image: ${MCP_WORKER_IMAGE:?Set the versioned worker image}
+    network_mode: none
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    tmpfs: ["/tmp:size=536870912,mode=1777"]
+    environment:
+      FETCH_PROXY: http://127.0.0.1:3128
+    volumes:
+      - egress_socket:/egress:ro
+      - worker_rpc:/rpc
+    depends_on:
+      egress: {condition: service_started}
+    healthcheck:
+      test: [CMD, python, -c, "import httpx; c=httpx.Client(transport=httpx.HTTPTransport(uds='/rpc/worker.sock'),base_url='http://worker',timeout=3); c.get('/health').raise_for_status(); c.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  egress:
+    <<: *app
+    image: ${MCP_EGRESS_IMAGE:?Set the versioned egress image}
+    networks: [egress]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    volumes: [egress_socket:/egress]
+
+  searxng:
+    image: searxng/searxng@sha256:23482d8ecf7ddf66029479468ea04c1bb11d2b65785a17a7e629e2ffd13296ca
+    networks: [frontend]
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set unique SEARXNG_SECRET}
+    tmpfs: ["/etc/searxng:size=16m,mode=1777", "/var/cache/searxng:size=64m,mode=1777"]
+    volumes: [./infra/searxng-primary.yml:/etc/searxng/settings.yml:ro]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://localhost:8080/]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis@sha256:b9646e7cdf8165d985b88bb3e61b3f2f7625db7f6c98af79def91997d04f26b9
+    networks: [storage]
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    volumes: [redis_data:/data]
+    command: [redis-server, --appendonly, "yes"]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  s3:
+    image: chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8
+    networks: [storage]
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:size=134217728,mode=1777"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?Set unique S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?Set unique S3_SECRET_KEY}
+    volumes: [s3_data:/data]
+    command: [mini, -dir=/data, -ip=127.0.0.1, -ip.bind=0.0.0.0, -master.telemetry=false, -admin.ui=false, -webdav=false]
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8333/readyz]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+networks:
+  frontend:
+  egress:
+  storage: {internal: true}
+volumes:
+  frontend_credentials:
+  control_api:
+  worker_rpc:
+  egress_socket:
+  redis_data:
+  s3_data:

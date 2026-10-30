@@ -1,0 +1,25 @@
+# Render with envsubst '${PUBLIC_HOST}' only, preserving nginx's own variables.
+# Include per-instance *.http.conf globally ONCE, as described in HTTPS.md.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${PUBLIC_HOST};
+    if ($host != "${PUBLIC_HOST}") { return 421; }
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        default_type text/plain;
+    }
+    location / { return 404; }
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${PUBLIC_HOST};
+    if ($host != "${PUBLIC_HOST}") { return 421; }
+    ssl_certificate /etc/letsencrypt/live/research-mcp-${PUBLIC_HOST}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/research-mcp-${PUBLIC_HOST}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+    include /etc/nginx/research-mcp/${PUBLIC_HOST}/*.location.conf;
+    location / { return 404; }
+}

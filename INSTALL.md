@@ -1,159 +1,102 @@
-# Fresh private Linux server
+# Compose deployment
 
-This is a **single-owner loopback/Tailscale deployment**, not a public hosting setup. It does not migrate the existing development installation. Use a fresh checkout and unique instance name/ports; initialization refuses existing configuration. No step automatically deletes stored data.
+One owner per stack. Docker runs the MCP frontend, search, control, browser worker, egress proxy, Redis and S3 storage. There is **no host application virtualenv, application systemd unit or runtime Docker access**. Docker administrators remain trusted. Optional public TLS: [HTTPS.md](HTTPS.md).
+
+**Verified candidate:** `candidate-20261030-181946` (Linux amd64), published publicly in `malgamoe/mcps`. Two separate deployments passed live API/browser, owner-isolation, reboot, test-CA HTTPS and guarded retention checks in one disposable Ubuntu VM. This is not a production soak or public ACME test. Running installations remain unchanged; see [LIVE-STATUS.md](LIVE-STATUS.md).
 
 ## Prerequisites
 
-- Linux server with Docker Engine and Compose v2, Python 3, and `uv` on PATH. Use a non-root login that can run Docker (Docker access is effectively privileged).
-- Target platform: Linux x86-64. Other architectures/rootless Docker/SELinux deployments have not been verified.
-- Allow outbound public HTTP/HTTPS for search and the egress proxy, plus dependency/browser downloads during build. No public inbound ports are needed.
-- For remote clients, install/connect Tailscale first and limit access with your Tailnet policy. Otherwise keep the default loopback bind and use SSH forwarding.
-- Start with roughly 8 GiB RAM and 20 GiB free disk for images/browser assets/cache; actual needs depend on workload. No automatic retention is enabled.
+- Linux x86-64 with Docker Engine and Compose v2. The optional setup/retention helpers need only the system Python 3 standard library, not installed application packages.
+- An administrator/root shell for provisioning, from a root-owned checkout. Do not execute privileged setup scripts from another user's writable directory.
+- Roughly 8 GiB RAM and sufficient disk for browser images and accumulated cache. Storage has no automatic expiry or quota.
+- Outbound public HTTP/HTTPS for image pulls and research. No public inbound ports are needed for loopback/Tailnet use. Docker publishing can bypass UFW; never publish storage/control/search/worker ports.
 
-On a fresh Ubuntu 24.04 server, an administrator can install the prerequisites and create the service user:
+On a fresh Ubuntu 24.04 host, install Docker/Compose, Python 3 and Git through your administrator. Enable Docker at boot. No MCP login account or Docker-group grant to an application is needed.
 
 ```sh
-sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2 python3-venv ca-certificates git
-sudo systemctl enable --now docker
-sudo useradd --create-home --shell /bin/bash research  # omit if this user already exists
-sudo usermod -aG docker research
-sudo -iu research
+git clone https://github.com/MalgAmoe/research-mcp-service.git /srv/research-alice
+cd /srv/research-alice
+python3 scripts/setup_server.py init --instance alice --port 8766 --version candidate-20261030-181946
 ```
 
-From the service user's shell, install uv (skip if already installed). Tested version: 0.11.9.
+Use an explicit published version, not `latest`. Default image repository: `malgamoe/mcps`; override with `--repository` if required. Tags are `research-mcp-app-VERSION`, `research-mcp-worker-VERSION` and `research-mcp-egress-VERSION`. The app image runs frontend/control/credential-initialization roles with different commands and permissions. Upstream Redis, SeaweedFS and SearXNG images are pinned by digest.
+
+Initialization creates private `.env.runtime`, `.env.mcp`, `.env.control` and two token files under `.secrets/`. No service starts and no credentials are printed. IDs/ports are reserved under `/var/lib/research-mcp/instances/`, including initialized but stopped installations. The helper checks existing labelled/unlabelled Docker resources, stopped-container port assignments and host listeners before creating configuration. Partial initialization retains its reservation for explicit inspection; there is no automatic reset or teardown.
+
+The default published address is `127.0.0.1`. For Tailnet clients use `--host YOUR_TAILSCALE_IPV4`. For another owner, use another checkout, instance ID and MCP port. Search has no host port to allocate. Do not copy another owner's environment files, credentials or volumes.
+
+### Verified image digests
+
+The version above identifies these images. For immutable references, replace the three image values in `.env.runtime` after initialization with `malgamoe/mcps@sha256:DIGEST` from this table; these exact digests were pulled anonymously and tested in the VM.
+
+| Setting | SHA-256 digest |
+|---|---|
+| `MCP_APP_IMAGE` | `b3a026c1be9a84347d170944707d1d9ccc43abe1ded06df640638726446a79df` |
+| `MCP_WORKER_IMAGE` | `ede7f5f79e95215080d02c9fa1c89cf80747055633282edc8e746109a38b07f8` |
+| `MCP_EGRESS_IMAGE` | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
+
+## Start and check
 
 ```sh
-python3 -m venv ~/.local/share/research-bootstrap
-~/.local/share/research-bootstrap/bin/pip install uv==0.11.9
-mkdir -p ~/.local/bin
-ln -s ~/.local/share/research-bootstrap/bin/uv ~/.local/bin/uv
-export PATH="$HOME/.local/bin:$PATH"
-uv --version
-```
-
-Use a real Git checkout so updates and deployed revisions remain trackable:
-
-```sh
-git clone https://github.com/MalgAmoe/research-mcp-service.git ~/research-mcp
-cd ~/research-mcp
-git status --short
-git rev-parse HEAD
-```
-
-For `/srv/research-mcp` instead, have the administrator provide an empty directory owned by the service user and clone there. Do not copy another installation's `.env*`, `.secrets/`, `.state/`, `.venv/`, Docker volumes or container images.
-
-## Initialize and start
-
-From the checkout root:
-
-```sh
-python3 scripts/setup_server.py init --instance myserver --host 127.0.0.1
-# For Tailnet access instead, use --host YOUR_SERVER_TAILSCALE_IPV4.
-# Optional: --port 8766 --search-port 18080 (choose unused ports).
-```
-
-This creates mode-0600 environment files and separate MCP/backend/storage credentials. Nothing is started and no token is printed. MCP reaches control through `.state/control-rpc/gateway.sock`, **not a container IP or TCP mapping**. The control service retains its internal storage network; browser execution retains network-none and proxy-mediated egress. Only the MCP listener is client-facing; search binds loopback.
-
-Keep `.state` and `.secrets` private (0700). The socket subdirectory is intentionally writable by container UID 10001; its private host parent prevents access by other host users. Do not relocate the checkout after initialization without updating the absolute socket path and service unit.
-
-Build/start the containers and install locked Python dependencies (Python 3.12). This may take several minutes and download browser assets. To retain progress without blocking your shell:
-
-```sh
+# Can take several minutes on the first image pull; no browser builds occur here.
 nohup python3 scripts/setup_server.py up > .state/setup.log 2>&1 &
 echo $! > .state/setup.pid
-# Inspect .state/setup.log and wait for successful completion before continuing.
+# Wait for successful completion; inspect .state/setup.log.
 python3 scripts/setup_server.py status
+python3 scripts/setup_server.py check
+# Optional external search/page acquisition, artifact readback and both browsers:
+python3 scripts/setup_server.py check --live
 ```
 
-Before dependency installation or browser builds, `up` pulls the configured SeaweedFS, Redis and SearXNG images. If a pull fails, it stops without starting services or copying/substituting an image.
+Checks run inside the frontend container, with no host application packages or model calls. The live check saves a test page and closes only its own browser sessions; it does not certify every provider/site. The default check verifies authenticated discovery and private control/Redis calls.
 
-Artifact storage uses SeaweedFS **4.51**, pinned by release tag and digest. Its `s3` service runs non-root with a read-only root filesystem and a separate `s3_data` volume. S3 and administrative interfaces are confined to the internal storage network; no storage ports are published. Telemetry, the admin UI and WebDAV are disabled. Physical reclamation of already-deleted objects is asynchronous; it does not expire live artifacts.
+`up` validates Compose, pulls the selected images and starts the stack with a bounded health wait. A pull failure stops before container startup; there is no cached-image substitution. `up --no-pull` restarts already downloaded images and refuses implicit pulls; it is not a workaround for an incomplete installation.
 
-`up` starts the dedicated search project and this instance's storage/egress/worker/control project. Generated images and volumes are instance-scoped. Build/install failures stop the command; already-started components are left in place for inspection, not purged. `up --no-build` starts previously provisioned images without dependency synchronization or the explicit registry preflight; it is intended for restarts, not as a workaround for an incomplete fresh installation.
-
-For an initial foreground MCP run:
+Direct Compose equivalent:
 
 ```sh
-python3 scripts/setup_server.py run
+docker compose --env-file .env.runtime -f compose.deploy.yml pull
+docker compose --env-file .env.runtime -f compose.deploy.yml up -d --pull never --wait --wait-timeout 300
 ```
 
-From another terminal:
+Keep `.env*` mode 0600 and `.secrets/` and `.state/` private. A network-none, one-shot initializer copies only the two frontend bearer tokens into a private named volume. The frontend mounts that volume read-only, runs as UID 10001 and receives no storage credentials. Control communicates over a separate named Unix-socket volume. The browser worker remains credential-free and network-none. No application container mounts the Docker socket.
+
+Client endpoint: `http://YOUR_BIND_ADDRESS:PORT/mcp`, with `Authorization: Bearer <token>` from `.secrets/mcp-token`. Transfer tokens privately, never in URLs, Git or shared prompts. Plain HTTP is appropriate only over loopback or the encrypted Tailnet. The container listens internally on all its interfaces, but accepted HTTP Host/Origin values remain tied to the configured published endpoint; they are not wildcarded.
+
+## Stop, boot and update
 
 ```sh
-.venv/bin/python scripts/check_install.py
-# Optional: public search/page acquisition, S3 write/read, and one Chromium session:
-.venv/bin/python scripts/check_install.py --live
+python3 scripts/setup_server.py stop       # stops this stack, preserves volumes
+python3 scripts/setup_server.py up --no-pull
 ```
 
-The default check verifies authenticated MCP discovery/health and control/Redis calls. It does not certify browser launch, search coverage or arbitrary website access. The live check closes only its own browser session; it saves one page in the cache. No model calls are made.
+Docker restart policies recover running services after a host reboot. A Tailnet-specific published address must already exist when Docker restores that port binding; restart policies do not guarantee recovery from a failed port allocation. Default loopback publishing with SSH/HTTPS avoids that dependency. Tailnet boot ordering needs a separate check on the actual host.
 
-Client endpoint: `http://YOUR_BIND_ADDRESS:8766/mcp`. Configure `Authorization: Bearer <token>` using the value in `.secrets/mcp-token`, transferred through a private channel. Never put it into a public URL, Git, logs or a shared prompt. Direct HTTP is suitable only over loopback or the encrypted Tailnet. Check Tailnet/firewall permissions if remote connections fail.
+The frontend waits for authenticated Redis/S3/worker readiness and a clear maintenance lock before serving. Credentials remain in their named volume; the initializer need not rerun at boot. Intentionally stopped containers stay stopped until an administrator starts them. Browser handles expire when their worker restarts; saved evidence is persistent.
 
-## Optional boot service
+For updates: coordinate downtime and back up configuration plus consistent stopped-storage volumes. Record source revision and image references. Stop the stack, review/pull the intended repository revision and set the three image references in `.env.runtime` to the matching versioned release (or digest-pinned references), then run `up` and checks. Source/configuration and images must match. No automatic rollback is promised; storage changes can require a compatible data backup. Never use `down -v` or Docker prune as routine maintenance.
 
-Stop the foreground MCP process first. Generate a unit; generation does **not** install or enable it:
+This workflow **does not migrate existing host-runtime or MinIO installations**. Do not initialize over them or pull/recreate them blindly. Preserve existing credentials/data and plan an explicit migration or approved reset. Never mount MinIO's data directory into SeaweedFS. The existing local development Compose files remain for that running installation; `compose.deploy.yml` is the fresh deployment entry point.
 
-```sh
-python3 scripts/setup_server.py unit
-mkdir -p ~/.config/systemd/user
-cp .state/research-mcp-myserver.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now research-mcp-myserver.service
-journalctl --user -u research-mcp-myserver.service -f
-```
-
-Replace `myserver` with your instance ID. Have the administrator enable Docker at boot and, if desired, `loginctl enable-linger YOUR_USER` so the user service starts without login. These are privileged administrative decisions; the setup script does not perform them. The service starts/waits for its containers before MCP and retries failures. A Tailnet bind may fail until Tailscale is ready; the restart policy retries it. No package downloads/builds occur in `ExecStartPre`; run `up` once successfully beforehand.
-
-`systemctl --user stop research-mcp-myserver.service` stops MCP only. Containers keep their restart policies. To stop this installation's containers without deleting volumes:
+## Manual retention
 
 ```sh
-docker compose --env-file .env.search -f compose.search.yml stop
-docker compose --env-file .env.runtime -f docker-compose.yml -f compose.workers.yml -f compose.control.yml -f compose.server.yml --profile workers --profile control stop
-```
-
-## Updates, recovery and data
-
-**Existing MinIO installations:** this release changes storage to SeaweedFS and configuration to `S3_ACCESS_KEY` / `S3_SECRET_KEY` (control uses `S3_ENDPOINT`, `S3_SECURE` and optional `S3_BUCKET_*`). It does not convert or reuse MinIO volumes. Do not update/recreate a valuable installation until a separate S3 copy/verification or an explicitly approved clean reset has been arranged. Do not mount old MinIO data into SeaweedFS.
-
-Coordinate downtime: worker recreation expires browser sessions. Back up private configuration and Redis/S3 volumes before significant changes; this workflow does not implement automated backups or migrations. Use a consistent stopped-storage backup rather than copying live database files. Preserve the matching credentials with any volume backup.
-
-For an update, coordinate downtime, check `git status --short` and record `git rev-parse HEAD`. Stop MCP, run `git pull --ff-only`, then `python3 scripts/setup_server.py up`, restart MCP and rerun checks. Do not discard local changes or reset a divergent checkout automatically. The Unix endpoint path remains stable across container recreation; no IP edits are needed. Never run initialization over existing data or use `down -v` as routine cleanup. A rollback may require the previous source/image and compatible data backup; this script does not claim automatic transactional rollback.
-
-## Manual cache retention
-
-The existing retention policy is available through a host launcher for both development and fresh-server layouts:
-
-```sh
-python3 scripts/retention.py                       # read-only inventory, no deletion
+python3 scripts/retention.py                         # read-only inventory
 python3 scripts/retention.py --days 30 --rss-days 90
+python3 scripts/retention.py --pin DOC_ID
 python3 scripts/retention.py --list-pins
-python3 scripts/retention.py --pin DOC_ID           # explicitly changes pin state
 python3 scripts/retention.py --unpin DOC_ID
 ```
 
-The launcher runs a temporary control-image process on this instance's private storage network, with no dependency startup and no Docker socket inside the container. It does not stop/restart services. A dry run may run while clients are active, so its counts are advisory and can change. Defaults: documents older than 30 days since retrieval, RSS entries older than 90 days since fetching; cached reads do not extend retention. Pins protect document IDs and their currently referenced artifacts from retention, not from replacement by refresh. Subscriptions remain. Export irreplaceable evidence separately.
+The helper launches a temporary control-image process on this stack's storage network; it never starts dependencies or mounts Docker inside a container. Dry-run counts can change while writers remain active. Pins protect the current artifact references from cleanup, not from replacement by refresh. Cache IDs are not archives: export irreplaceable evidence separately. Malformed metadata and versioned buckets abort cleanup. Subscriptions are retained; no automatic TTL/lifecycle policy is installed.
 
-Cleanup also removes stale URL/recent/RSS indexes and old unreferenced artifacts, while keeping shared artifacts referenced by retained documents. Malformed records and versioned MinIO buckets abort rather than guessing. This is an age policy, not a disk quota: pins, recent downloads and backups can still grow. It does not prune browser temp files, logs, Docker images or backups.
+After reviewing the plan and making a consistent backup, stop MCP and control while leaving Redis/S3 running:
 
-**Apply is manual and requires the updated control image.** After reviewing a dry run and making a consistent backup, coordinate downtime:
+```sh
+docker compose --env-file .env.runtime -f compose.deploy.yml stop mcp control
+python3 scripts/retention.py --apply --writers-stopped
+# Only after successful completion and inspection:
+python3 scripts/setup_server.py up --no-pull
+```
 
-1. Stop MCP using its existing supervisor and stop this deployment's `control` service using the matching Compose files. Leave Redis/MinIO running. Stop any other direct/one-off storage writers too.
-2. Run `python3 scripts/retention.py --apply --writers-stopped`.
-3. Restart control/MCP only after successful completion and inspect health.
-
-The launcher refuses a missing/running/paused/restarting control. It checks again **after** the maintenance process holds the Redis lock, before authorizing deletion. A restarted control rejects ordinary requests while that lock exists. Other direct-storage clients cannot honor this guard: `--writers-stopped` is your explicit confirmation about them. An old control image rejects the guard protocol before deletion; rebuild it rather than bypassing the launcher.
-
-Redis and S3 deletion is not atomic. Failure after deletion starts, or a killed maintenance process, leaves the non-expiring maintenance lock in place. Keep writers stopped. Verify no maintenance/pin process is active, inspect the error and partial state, and only then explicitly clear `retention:maintenance_lock` in this deployment's Redis and rerun the approved cleanup. There is intentionally no automatic unlock/restart. A failure before any deletion releases its lock normally.
-
-No cleanup timer or automatic deletion is installed. Do not add independent Redis TTLs or S3 lifecycle rules: those would bypass coordinated deletion and pin protection.
-
-## Verification status
-
-The existing MinIO-based VPS was tested on Ubuntu 24.04.5 x86-64, 4 vCPU / 8 GB RAM: application/browser builds, private Unix control, systemd startup, live search, document storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run. That VPS has not been switched to SeaweedFS.
-
-SeaweedFS 4.51 was pulled and tested locally with non-root/read-only execution, artifact integrity, wrong-credential rejection, process-crash recovery, stopped-storage backup/restore, an adjacent-release upgrade and the application's S3 storage operations. These checks do not establish host-power-loss durability.
-
-VPS reboot recovery is verified: the service and containers resumed automatically, and cached document retrieval, acquisition and Chromium checks passed. Provider-specific boot configuration is recorded in the deployment's private operations notes.
-
-Still to verify: the complete fresh-server workflow with SeaweedFS and destructive coordinated retention on disposable test data.
+Stop any other direct/one-off writers too. The launcher checks the real control/MCP container states and rechecks under a nonexpiring Redis maintenance lock. Redis/S3 deletion is not atomic. Failure after deletion starts retains the lock: keep writers stopped, inspect partial state and confirm no maintenance job remains before explicitly clearing this deployment's `retention:maintenance_lock`. There is no automatic unlock, restart or deletion schedule.

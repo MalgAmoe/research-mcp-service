@@ -33,15 +33,18 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 
 - Local SeaweedFS deployment: 34-tool discovery, S3 capabilities, live search/page acquisition, artifact storage/retrieval, Chromium, Camoufox and retention dry run passed. Worker/control containers rebuilt; storage remains private.
 - VPS: application/browser builds, 119 offline tests, live search, page storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run checked.
-- Current repository: 122 offline tests pass, including rejection of S3 credentials by the isolated worker.
+- Image-only candidate `candidate-20261030-181946`: 134 offline tests pass. All three images were published to `malgamoe/mcps` and pulled anonymously by exact digest in a disposable Ubuntu VM. Two independent Compose deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation, and frontend denial of the other owner's storage network. No host application virtualenv or application systemd unit was used.
+- Both Compose stacks recovered after a VM reboot without provisioning: saved evidence remained available, old browser handles expired, and fresh browser/API checks passed. This tested loopback publishing, not Tailnet address ordering at boot.
+- Generated HTTPS routes passed trusted **test-CA** TLS, bearer/Host/Origin rejection and unknown-path checks. This is not new public ACME or certificate-renewal verification. RSS subscription and cached-entry isolation passed with the Django weblog feed; an initial Python feed fetch failed and was not diagnosed.
+- Disposable-fixture retention rejected running writers, honored pins, deleted the selected Redis metadata and S3 objects, released its lock, and preserved subscriptions/cached RSS. Alpha stop/cleanup/restart left beta's saved data and live browser usable. Neither working installation received the new workflow.
 - VPS reboot recovery verified: SSH returned in 22 seconds, HTTPS/MCP in 38 seconds; cached document retrieval, search call and Chromium passed afterward. No failed system services; a provider cloud-init deprecation warning remains.
-- Public TLS, bearer rejection and certificate-renewal/reload dry run passed. Renewal checks run every six hours.
-- Destructive retention execution on real data remains untested.
+- VPS public TLS, bearer rejection and certificate-renewal/reload dry run passed. Renewal checks run every six hours.
+- Destructive retention on production data and power-loss durability remain untested; the deletion check used only a deliberately aged disposable fixture.
 - Search providers can return degraded results; request diagnostics when investigating coverage or failures.
 
 ## Operational limits
 
-- Fresh installs use a release/digest-pinned SeaweedFS image, successfully pulled locally. The complete fresh-server workflow with SeaweedFS has not yet been repeated on a clean VPS. Existing MinIO installations need an explicit migration or approved reset before updating; see INSTALL.md.
+- Fresh installs use digest-pinned SeaweedFS. The Compose workflow was verified in a disposable local Ubuntu VM, not a newly provisioned public VPS or a production soak. Existing MinIO installations need an explicit migration or approved reset before updating; see INSTALL.md.
 - Automatic cleanup is disabled. Use `python3 scripts/retention.py` for a read-only inventory; apply requires stopped writers and the guarded maintenance workflow in INSTALL.md.
 - Cache IDs are not archives; refresh can replace cached content. Export irreplaceable evidence separately.
 - Browser observations and successful extraction do not certify completeness or readiness. Full backend document retrieval still has a 2 MiB ceiling before passage slicing.
@@ -51,4 +54,5 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 Local deployment/checks: `.state/deploy-seaweed/build.log`, `.state/deploy-seaweed/finish.log`, `.state/deploy-seaweed/tests.log`.
 Retention: `.state/deploy-seaweed/retention-dry-run.log`.
 MCP/worker source snapshot: `sha256:dfdf7b759f33a1b8eda861d2611907462043581096d81d45ea6efde3a5436f6a`.
+Image-only candidate: `.state/compose-release/{tests,build,publish-public,pull-vm,start-vm,isolation-reboot,extra-retry}.log`. The initial RSS fixture failure is retained in `extra.log`. The one-off VM test harness is private and is not shipped in the repository.
 VPS: locations recorded in `.state/CONTABO.md`.

@@ -1,0 +1,13 @@
+# Render with: envsubst '${PUBLIC_HOST}' < this-file
+# ACME only. Do not overwrite an existing site's configuration.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${PUBLIC_HOST};
+    if ($host != "${PUBLIC_HOST}") { return 421; }
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        default_type text/plain;
+    }
+    location / { return 404; }
+}

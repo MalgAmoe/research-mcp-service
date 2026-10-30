@@ -174,7 +174,10 @@ def main():
             return await gateway('POST', '/browser', payload={'action': action, 'params': params})
     app = create_app(path.read_text().strip(), host, port, search_backend=backend,
                      gateway_backend=gateway, browser_backend=browser, browser_timeout=60)
-    uvicorn.run(app, host=host, port=port, access_log=False, log_level='warning',
+    # Container listening is separate from the externally accepted Host/Origin.
+    listen_host = os.environ.get('MCP_LISTEN_HOST', host)
+    listen_port = int(os.environ.get('MCP_LISTEN_PORT', str(port)))
+    uvicorn.run(app, host=listen_host, port=listen_port, access_log=False, log_level='warning',
                 proxy_headers=False, limit_concurrency=32, timeout_keep_alive=10)
 
 

@@ -1,6 +1,6 @@
 # Runtime design and boundaries
 
-Current scope: one private owner, authenticated MCP over Tailscale/loopback. Several clients with that token share the owner's cache and browser worker. No tenant router, OAuth, public ingress or multi-user security claim. See [README.md](README.md) for tools and [LIVE-STATUS.md](LIVE-STATUS.md) for operations and verification.
+Current scope: one owner per independent deployment, authenticated MCP over loopback/Tailscale or optional HTTPS. Clients with the same token share that owner's cache and browser worker. There is no shared-application tenant router or OAuth; this is not a general multi-user hosting security claim. See [README.md](README.md) for tools and [LIVE-STATUS.md](LIVE-STATUS.md) for operations and verification.
 
 ## Execution paths
 
@@ -14,7 +14,7 @@ Client → bearer-authenticated MCP process
                                                           └─ public HTTP(S)
 ```
 
-Fresh-server configuration (INSTALL.md) carries MCP-to-control HTTP over a private host Unix socket; the existing development deployment uses internal TCP. The socket's host parent is private to the service user and the backend still requires bearer authentication. No control TCP port is published in the fresh-server overlay.
+The new image-only Compose deployment puts MCP and SearXNG on an outbound frontend network, control/Redis/S3 on a separate internal storage network, and the egress proxy on its own outbound network. MCP reaches control only through a read-only named Unix-socket volume; control still requires bearer authentication. Only MCP publishes a host port. A network-none one-shot initializer copies two private bearer tokens into a named volume; the non-root frontend mounts it read-only. It receives no storage credentials or Docker access. Docker handles boot recovery, with a frontend startup gate for private dependencies and the retention lock. Existing deployments retain their older host frontend/TCP or host-socket wiring until explicitly migrated.
 
 The control gateway requires WORKER_SOCKET; read/conversion/feed failures do not fall back to host fetching. Legacy direct-search/research/safe-read HTTP routes have been removed, and the route allowlist still rejects them. MCP research uses the configured search backend followed by isolated batch reading; missing search configuration fails closed rather than falling back to a legacy route. Document conversion requires worker RPC even when called directly. Shared extraction functions remain in the gateway package for execution inside the isolated worker.
 
@@ -38,6 +38,10 @@ Redis retains metadata; SeaweedFS retains artifacts through S3. Each deployment 
 
 Runtime configuration/secrets, cached evidence and data volumes must survive repository cleanup. The original personal gateway is unrelated to this deployment and must remain untouched. Source provenance is recorded in ORIGIN.md.
 
-## Before any public or multi-user deployment
+## Separate-deployment provisioning
+
+Fresh provisioning reserves instance IDs and ports in a root-private host inventory and checks existing Docker resources and listeners before creating configuration. Reservations cover initialized but stopped deployments; they are not automatically discarded on failure or shutdown. This is an administrator inventory, not a runtime tenant lookup. Optional nginx snippets route exact public paths to independent loopback MCP listeners without injecting bearer tokens. See INSTALL.md and HTTPS.md. Fresh-host and two-deployment acceptance checks remain required before treating the new workflow as verified.
+
+## Limits beyond the tested single-owner deployments
 
 Require reviewed TLS/authentication, per-owner provisioning and isolation tests, appropriate browser sandbox hardening, global/per-owner quotas, end-to-end cancellation and recovery tests, reproducible builds, secret-safe diagnostics, and tested backup/restore/deletion procedures. Separate containers alone are not a sufficient security guarantee. Client-supplied tenant IDs must never authorize routing.

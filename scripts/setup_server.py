@@ -1,63 +1,27 @@
 #!/usr/bin/env python3
-"""Provision a fresh private Linux deployment. Never overwrites configuration or deletes data."""
+"""Initialize and operate an image-only Compose deployment (administrator only)."""
 import argparse
+import fcntl
 import ipaddress
+import json
 import os
 from pathlib import Path
 import re
 import secrets
-import shutil
+import socket
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ['.env.runtime', '.env.search', '.env.control', '.env.mcp',
-         '.secrets/mcp-token', '.secrets/gateway-token']
+REGISTRY = Path('/var/lib/research-mcp/instances')
+FILES = ['.env.runtime', '.env.control', '.env.mcp', '.secrets/mcp-token', '.secrets/gateway-token']
+DOCKER = ['docker', '--host', 'unix:///var/run/docker.sock']
 
 
 def private_write(path, text):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'w') as f:
         f.write(text)
-
-
-def initialize(root, identity, host, port, search_port):
-    if not re.fullmatch(r'[a-z][a-z0-9-]{0,31}', identity):
-        raise ValueError('Instance ID: lowercase letter followed by up to 31 lowercase letters/digits/hyphens')
-    address = ipaddress.IPv4Address(host)
-    if not address.is_loopback and address not in ipaddress.IPv4Network('100.64.0.0/10'):
-        raise ValueError('Bind only to loopback or your Tailscale IPv4 address')
-    if not all(1024 <= p <= 65535 for p in [port, search_port]) or port == search_port:
-        raise ValueError('Choose distinct unprivileged MCP and search ports')
-    if any(c.isspace() or c in ('%', '"', "'", '\\', '$') for c in str(root)) or len(str(root / '.state/control-rpc/gateway.sock').encode()) >= 104:
-        raise ValueError('Use a short absolute checkout path without whitespace, quotes, percent, dollar or backslash')
-    for name in FILES:
-        if (root / name).exists() or (root / name).is_symlink():
-            raise FileExistsError(f'{name} already exists; no configuration changed. Use a fresh checkout.')
-    for name in ['.state', '.secrets']:
-        path = root / name
-        if path.is_symlink() or (path.exists() and (path.stat().st_mode & 0o077)):
-            raise ValueError(f'{name} must be a real private directory (mode 700)')
-    if (root / '.state/control-rpc').exists():
-        raise FileExistsError('Control socket directory already exists; inspect it manually')
-    for name in ['.state', '.secrets']:
-        (root / name).mkdir(mode=0o700, exist_ok=True)
-    # Parent .state is 0700; only the control container gets this subdirectory bind mount.
-    socket_dir = root / '.state/control-rpc'
-    socket_dir.mkdir(mode=0o777)
-    socket_dir.chmod(0o777)  # allow container UID 10001 without privileged host chown
-    backend_token = secrets.token_urlsafe(48)
-    private_write(root / '.secrets/mcp-token', secrets.token_urlsafe(48) + '\n')
-    private_write(root / '.secrets/gateway-token', backend_token + '\n')
-    private_write(root / '.env.control', f'GATEWAY_TOKEN={backend_token}\n')
-    private_write(root / '.env.runtime', f'TENANT_ID={identity}\nS3_ACCESS_KEY=mcp{secrets.token_hex(10)}\nS3_SECRET_KEY={secrets.token_hex(32)}\n')
-    private_write(root / '.env.search', f'MCP_INSTANCE_ID={identity}\nMCP_SEARCH_PORT={search_port}\nSEARXNG_SECRET={secrets.token_hex(32)}\n')
-    private_write(root / '.env.mcp',
-        f'MCP_BIND_HOST={host}\nMCP_PORT={port}\nMCP_TOKEN_FILE=.secrets/mcp-token\n'
-        f'MCP_ENABLE_SEARCH=true\nSEARXNG_URL=http://127.0.0.1:{search_port}\n'
-        'SEARCH_PROVIDER=auto\nDDGS_BACKEND=duckduckgo,yahoo\nMCP_ENABLE_RESEARCH=true\n'
-        'MCP_GATEWAY_URL=http://control\nMCP_GATEWAY_TOKEN_FILE=.secrets/gateway-token\n'
-        f'MCP_GATEWAY_SOCKET={socket_dir}/gateway.sock\n')
 
 
 def values(root, name):
@@ -65,102 +29,217 @@ def values(root, name):
                 if line and not line.startswith('#'))
 
 
-def run(args, env_file=None):
+def image_refs(repository, version):
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/-]*(?::[0-9]+)?(?:/[A-Za-z0-9._-]+)*', repository):
+        raise ValueError('Invalid image repository')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', version):
+        raise ValueError('Use an explicit release version, without whitespace or shell characters')
+    return {f'MCP_{role.upper()}_IMAGE': f'{repository}:research-mcp-{role}-{version}'
+            for role in ['app', 'worker', 'egress']}
+
+
+def validate_initialization(root, identity, host, port):
+    if not re.fullmatch(r'[a-z][a-z0-9-]{0,31}', identity):
+        raise ValueError('Instance ID: lowercase letter followed by up to 31 lowercase letters/digits/hyphens')
+    address = ipaddress.IPv4Address(host)
+    if not address.is_loopback and address not in ipaddress.IPv4Network('100.64.0.0/10'):
+        raise ValueError('Bind only to loopback or your Tailscale IPv4 address')
+    if not 1024 <= port <= 65535:
+        raise ValueError('Choose an unprivileged MCP port')
+    if not root.is_absolute():
+        raise ValueError('Use an absolute checkout path')
+    for name in FILES + ['.env.search']:
+        if (root / name).exists() or (root / name).is_symlink():
+            raise FileExistsError(f'{name} already exists; use a fresh checkout, not an in-place migration')
+    for name in ['.state', '.secrets']:
+        path = root / name
+        if path.is_symlink() or (path.exists() and path.stat().st_mode & 0o077):
+            raise ValueError(f'{name} must be a real private directory (mode 700)')
+
+
+def initialize(root, identity, host, port, version, repository='malgamoe/mcps'):
+    validate_initialization(root, identity, host, port)
+    refs = image_refs(repository, version)
+    for name in ['.state', '.secrets']:
+        (root / name).mkdir(mode=0o700, exist_ok=True)
+    backend = secrets.token_urlsafe(48)
+    private_write(root / '.secrets/mcp-token', secrets.token_urlsafe(48) + '\n')
+    private_write(root / '.secrets/gateway-token', backend + '\n')
+    private_write(root / '.env.control', f'GATEWAY_TOKEN={backend}\n')
+    private_write(root / '.env.runtime',
+        f'DEPLOYMENT_LAYOUT=compose-v1\nTENANT_ID={identity}\nMCP_BIND_HOST={host}\nMCP_PORT={port}\n'
+        f'S3_ACCESS_KEY=mcp{secrets.token_hex(10)}\nS3_SECRET_KEY={secrets.token_hex(32)}\n'
+        f'SEARXNG_SECRET={secrets.token_hex(32)}\n' + ''.join(f'{k}={v}\n' for k, v in refs.items()))
+    private_write(root / '.env.mcp',
+        f'MCP_BIND_HOST={host}\nMCP_PORT={port}\nMCP_TOKEN_FILE=.secrets/mcp-token\n'
+        'MCP_ENABLE_SEARCH=true\nSEARXNG_URL=http://searxng:8080\nSEARCH_PROVIDER=auto\n'
+        'DDGS_BACKEND=duckduckgo,yahoo\nMCP_ENABLE_RESEARCH=true\nMCP_GATEWAY_URL=http://control\n'
+        'MCP_GATEWAY_TOKEN_FILE=.secrets/gateway-token\nMCP_GATEWAY_SOCKET=/control-api/gateway.sock\n')
+
+
+def command_env(env_file=None):
     env = os.environ.copy()
+    for key in list(env):
+        if key.startswith('COMPOSE_') or key in ('DOCKER_HOST', 'DOCKER_CONTEXT'):
+            env.pop(key)
     if env_file:
         for key in values(ROOT, env_file):
-            env.pop(key, None)  # shell exports must not override this instance's configuration
-    subprocess.run(args, cwd=ROOT, env=env, check=True)
+            env.pop(key, None)
+    return env
 
 
-def compose(search=False):
-    env_file = '.env.search' if search else '.env.runtime'
-    files = ['compose.search.yml'] if search else ['docker-compose.yml', 'compose.workers.yml', 'compose.control.yml', 'compose.server.yml']
-    args = ['docker', 'compose', '--env-file', env_file]
-    for file in files:
-        args += ['-f', file]
-    if not search:
-        args += ['--profile', 'workers', '--profile', 'control']
-    return args, env_file
+def run(args, env_file=None):
+    subprocess.run(args, cwd=ROOT, env=command_env(env_file), check=True)
+
+
+def capture(args):
+    return subprocess.check_output(args, text=True, env=command_env()).strip()
+
+
+def compose():
+    return DOCKER + ['compose', '--env-file', '.env.runtime', '-f', 'compose.deploy.yml']
+
+
+def trusted_path(path):
+    for parent in [path, *path.parents]:
+        if parent.is_symlink():
+            raise ValueError(f'Symlink not allowed here: {parent}')
+        st = parent.stat()
+        if st.st_uid != 0 or st.st_mode & 0o022:
+            raise ValueError(f'Use an administrator-owned path, not writable by other users: {parent}')
+
+
+def require_admin():
+    if os.geteuid() != 0:
+        raise ValueError('Run this provisioning helper as administrator from a root-owned checkout')
+    trusted_path(ROOT)
+    for name in ['.state', '.secrets', 'compose.deploy.yml']:
+        if (ROOT / name).exists():
+            trusted_path(ROOT / name)
+
+
+def project_names(identity):
+    # Also protect the search namespace used by older deployments.
+    return [f'research-mcp-{identity}', f'research-mcp-search-{identity}']
+
+
+def port_available(host, port):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host, port))
+    except OSError as exc:
+        raise ValueError(f'Port {host}:{port} is in use or unavailable') from exc
+
+
+def check_collisions(identity, host, port, records):
+    projects = project_names(identity)
+    for record in records:
+        if set(projects) & set(project_names(record['instance'])):
+            raise ValueError(f'Instance/project namespace is already reserved at {record["root"]}')
+        if port in {record['port'], record.get('search_port')}:
+            raise ValueError(f'Port is reserved by {record["instance"]}')
+    for project in projects:
+        for listing in [['ps', '-aq'], ['network', 'ls', '-q'], ['volume', 'ls', '-q']]:
+            if capture(DOCKER + listing + ['--filter', 'label=com.docker.compose.project=' + project]):
+                raise ValueError(f'{project} already owns Docker resources')
+    core, search = projects
+    named = [
+        (['ps', '-a', '--format', '{{.Names}}'], {f'{core}-{s}-1' for s in ['redis', 's3', 'minio', 'gateway', 'control', 'fetch-worker', 'egress', 'mcp', 'credentials', 'searxng']} | {f'{search}-searxng-1'}),
+        (['network', 'ls', '--format', '{{.Name}}'], {core + '_' + n for n in ['storage', 'egress', 'frontend']} | {search + '_default'}),
+        (['volume', 'ls', '--format', '{{.Name}}'], {core + '_' + v for v in ['redis_data', 's3_data', 'minio_data', 'worker_rpc', 'egress_socket', 'control_api', 'frontend_credentials']}),
+    ]
+    for listing, reserved in named:
+        if reserved & set(capture(DOCKER + listing).splitlines()):
+            raise ValueError('A generated Docker resource name is occupied, including unlabelled resources')
+    ids = capture(DOCKER + ['ps', '-aq']).splitlines()
+    if ids:
+        for line in capture(DOCKER + ['inspect', '--format', '{{json .HostConfig.PortBindings}}', *ids]).splitlines():
+            for bindings in (json.loads(line) or {}).values():
+                if any(binding.get('HostPort') and int(binding['HostPort']) == port for binding in bindings or []):
+                    raise ValueError('Port is assigned to an existing Docker container')
+    port_available(host, port)
+
+
+def registry_records():
+    records = []
+    for path in REGISTRY.glob('*.json'):
+        trusted_path(path)
+        record = json.loads(path.read_text())
+        if (not isinstance(record, dict) or not {'instance', 'root', 'host', 'port'} <= record.keys()
+                or not isinstance(record['instance'], str) or not re.fullmatch(r'[a-z][a-z0-9-]{0,31}', record['instance'])
+                or not isinstance(record['root'], str) or not Path(record['root']).is_absolute()
+                or type(record['port']) is not int or not 1024 <= record['port'] <= 65535):
+            raise ValueError(f'Invalid reservation: {path}')
+        records.append(record)
+    return records
+
+
+def reserve_and_initialize(identity, host, port, version, repository):
+    require_admin()
+    validate_initialization(ROOT, identity, host, port)
+    image_refs(repository, version)
+    REGISTRY.mkdir(parents=True, mode=0o700, exist_ok=True)
+    trusted_path(REGISTRY)
+    fd = os.open(REGISTRY / '.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        check_collisions(identity, host, port, registry_records())
+        private_write(REGISTRY / f'{identity}.json', json.dumps(dict(instance=identity, root=str(ROOT), host=host, port=port)) + '\n')
+        initialize(ROOT, identity, host, port, version, repository)
 
 
 def require_server_setup():
-    env = values(ROOT, '.env.mcp')
-    if env.get('MCP_GATEWAY_SOCKET') != str(ROOT / '.state/control-rpc/gateway.sock'):
-        raise ValueError('This workflow requires its own fresh-server configuration; it will not migrate a live development deployment')
-    if (ROOT / '.state').stat().st_mode & 0o077:
-        raise ValueError('.state must remain private (mode 700)')
-
-
-def unit_text(root, uv):
-    return f'''[Unit]
-Description=Private research MCP service
-StartLimitIntervalSec=0
-
-[Service]
-Type=simple
-WorkingDirectory={root}
-EnvironmentFile={root}/.env.mcp
-ExecStartPre=/usr/bin/python3 {root}/scripts/setup_server.py up --no-build
-ExecStart={uv} run --locked --no-sync --env-file .env.mcp python -m research_mcp_service.server
-Restart=on-failure
-RestartSec=10
-TimeoutStartSec=300
-TimeoutStopSec=30
-UMask=0077
-
-[Install]
-WantedBy=default.target
-'''
+    require_admin()
+    for name in FILES:
+        trusted_path(ROOT / name)
+        if (ROOT / name).stat().st_mode & 0o077:
+            raise ValueError(f'{name} must remain private')
+    env = values(ROOT, '.env.runtime')
+    identity = env['TENANT_ID']
+    if env.get('DEPLOYMENT_LAYOUT') != 'compose-v1' or not re.fullmatch(r'[a-z][a-z0-9-]{0,31}', identity):
+        raise ValueError('Requires fresh Compose configuration; existing installations are not migrated')
+    path = REGISTRY / f'{identity}.json'
+    trusted_path(path)
+    record = json.loads(path.read_text())
+    expected = dict(instance=identity, root=str(ROOT), host=env['MCP_BIND_HOST'], port=int(env['MCP_PORT']))
+    frontend = values(ROOT, '.env.mcp')
+    if any(record.get(k) != v for k, v in expected.items()) or any(frontend[k] != env[k] for k in ['MCP_BIND_HOST', 'MCP_PORT']):
+        raise ValueError('Configuration differs from its instance reservation; inspect before proceeding')
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    sub = p.add_subparsers(dest='action', required=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest='action', required=True)
     init = sub.add_parser('init')
     init.add_argument('--instance', required=True)
+    init.add_argument('--version', required=True)
+    init.add_argument('--repository', default='malgamoe/mcps')
     init.add_argument('--host', default='127.0.0.1')
     init.add_argument('--port', type=int, default=8766)
-    init.add_argument('--search-port', type=int, default=18080)
-    up = sub.add_parser('up'); up.add_argument('--no-build', action='store_true')
-    sub.add_parser('run'); sub.add_parser('status'); sub.add_parser('unit')
-    args = p.parse_args()
+    up = sub.add_parser('up'); up.add_argument('--no-pull', action='store_true')
+    sub.add_parser('status'); sub.add_parser('stop')
+    check = sub.add_parser('check'); check.add_argument('--live', action='store_true')
+    args = parser.parse_args()
     if args.action == 'init':
-        initialize(ROOT, args.instance, args.host, args.port, args.search_port)
-        print('Created private configuration. No services started; no credentials displayed.')
+        reserve_and_initialize(args.instance, args.host, args.port, args.version, args.repository)
+        print('Created private configuration and reserved instance/port. No services started or credentials displayed.')
         return
     require_server_setup()
-    if args.action == 'unit':
-        uv = shutil.which('uv')
-        if not uv or any(c.isspace() or c in ('%', '"', "'", '\\', '$') for c in uv):
-            raise ValueError('Install uv at an absolute path without special characters')
-        name = 'research-mcp-' + values(ROOT, '.env.runtime')['TENANT_ID'] + '.service'
-        private_write(ROOT / '.state' / name, unit_text(ROOT, uv))
-        print(f'Wrote .state/{name}; not installed or enabled.')
-    elif args.action == 'run':
-        run(['uv', 'run', '--locked', '--no-sync', '--env-file', '.env.mcp', 'python', '-m', 'research_mcp_service.server'], '.env.mcp')
-    elif args.action == 'status':
-        for search in [True, False]:
-            cmd, env = compose(search); run(cmd + ['ps'], env)
-    elif args.action == 'up':
-        if args.no_build and not (ROOT / '.venv/bin/python').exists():
-            raise FileNotFoundError('Python environment is missing; run up without --no-build first')
-        if not args.no_build:
-            # Fail before expensive browser builds or starting any services if
-            # an upstream image is unavailable. Never substitute cached exports.
-            cmd, env = compose(); run(cmd + ['pull', 's3', 'redis'], env)
-            cmd, env = compose(True); run(cmd + ['pull', 'searxng'], env)
-            run(['uv', 'sync', '--locked', '--no-dev', '--python', '3.12'])
-            cmd, env = compose(); run(cmd + ['build', 'egress', 'fetch-worker', 'control'], env)
-        for search in [True, False]:
-            cmd, env = compose(search)
-            run(cmd + ['up', '-d', '--no-build', '--wait', '--wait-timeout', '180'] + (['searxng'] if search else ['control']), env)
+    if args.action == 'up':
+        run(compose() + ['config', '--quiet'], '.env.runtime')
+        if not args.no_pull:
+            run(compose() + ['pull'], '.env.runtime')
+        run(compose() + ['up', '-d', '--pull', 'never', '--wait', '--wait-timeout', '300'], '.env.runtime')
+    elif args.action == 'check':
+        run(compose() + ['exec', '-T', 'mcp', 'python', '-m', 'research_mcp_service.container_check'] + (['--live'] if args.live else []), '.env.runtime')
+    else:
+        run(compose() + ['ps' if args.action == 'status' else 'stop'], '.env.runtime')
 
 
 if __name__ == '__main__':
     try:
         main()
-    except (ValueError, FileExistsError, FileNotFoundError) as exc:
+    except (ValueError, FileExistsError, FileNotFoundError, PermissionError) as exc:
         sys.exit(str(exc))
     except subprocess.CalledProcessError as exc:
-        sys.exit(f'Setup stopped (exit {exc.returncode}). Review the command output; no image substitution or automatic rollback was attempted.')
+        sys.exit(f'Setup stopped (exit {exc.returncode}). No substitution, data cleanup or automatic rollback attempted.')

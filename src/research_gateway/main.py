@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import httpx
+
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 
@@ -102,13 +105,25 @@ async def health_dependencies() -> dict[str, str]:
     try:
         await redis_store.ping()
         status["redis"] = "ok"
-    except Exception as exc:
-        status["redis"] = f"error: {exc}"
+        status["maintenance"] = "locked" if await redis_store.redis.exists('retention:maintenance_lock') else "ok"
+    except Exception:
+        status["redis"] = "unavailable"
+        status["maintenance"] = "unknown"
     try:
-        artifact_store.ensure_buckets()
+        await asyncio.to_thread(artifact_store.ensure_buckets)
         status["s3"] = "ok"
-    except Exception as exc:
-        status["s3"] = f"error: {exc}"
+    except Exception:
+        status["s3"] = "unavailable"
+    try:
+        if not settings.worker_socket:
+            raise ValueError('Worker socket missing')
+        transport = httpx.AsyncHTTPTransport(uds=settings.worker_socket)
+        async with httpx.AsyncClient(transport=transport, timeout=3, trust_env=False) as client:
+            response = await client.get('http://worker/health')
+            response.raise_for_status()
+            status["worker"] = "ok" if response.json().get('status') == 'ok' else "unavailable"
+    except Exception:
+        status["worker"] = "unavailable"
     return status
 
 

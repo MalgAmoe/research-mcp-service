@@ -23,7 +23,7 @@ class BrowserRequest(BaseModel):
 
 class HostedRoutes:
     """Do not expose legacy routes that can fetch/search outside worker RPC."""
-    allowed = re.compile(r'^/(?:health|capabilities|read_url|batch_fetch|convert_document|browser|documents(?:/[^/]+(?:/artifacts/(?:original|markdown))?)?|rss(?:/.*)?)$')
+    allowed = re.compile(r'^/(?:health(?:/dependencies)?|capabilities|read_url|batch_fetch|convert_document|browser|documents(?:/[^/]+(?:/artifacts/(?:original|markdown))?)?|rss(?:/.*)?)$')
 
     def __init__(self, app):
         self.app = app
