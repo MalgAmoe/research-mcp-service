@@ -12,35 +12,26 @@ HOST_CHECK = 'RETENTION_WRITER_CHECK_V1'
 
 
 def deployment(root):
-    # Match the existing dev layout or the fresh-server overlay. Do not inherit
-    # shell overrides that could redirect Compose to another instance's storage.
+    # Use the single supported Compose layout. Never inherit shell overrides
+    # that could redirect maintenance to another instance's storage.
     runtime = dict(line.split('=', 1) for line in (root / '.env.runtime').read_text().splitlines()
                    if line and not line.startswith('#'))
-    mcp = dict(line.split('=', 1) for line in (root / '.env.mcp').read_text().splitlines()
-               if line and not line.startswith('#'))
     env = os.environ.copy()
     for key in {*runtime, 'COMPOSE_PROJECT_NAME', 'COMPOSE_FILE', 'COMPOSE_PROFILES'}:
         env.pop(key, None)
-    if runtime.get('DEPLOYMENT_LAYOUT') == 'compose-v1':
-        for key in list(env):
-            if key.startswith('COMPOSE_') or key in ('DOCKER_HOST', 'DOCKER_CONTEXT'):
-                env.pop(key, None)
-        return ['docker', '--host', 'unix:///var/run/docker.sock', 'compose', '--env-file', '.env.runtime', '-f', 'compose.deploy.yml'], env
-    args = ['docker', 'compose', '--env-file', '.env.runtime', '-f', 'docker-compose.yml',
-            '-f', 'compose.workers.yml', '-f', 'compose.control.yml']
-    if mcp.get('MCP_GATEWAY_SOCKET'):
-        args += ['-f', 'compose.server.yml']
-    return args + ['--profile', 'workers', '--profile', 'control'], env
+    if runtime.get('DEPLOYMENT_LAYOUT') != 'compose-v1':
+        raise ValueError('Expected a compose-v1 deployment; no alternate layout is supported')
+    for key in list(env):
+        if key.startswith('COMPOSE_') or key in ('DOCKER_HOST', 'DOCKER_CONTEXT'):
+            env.pop(key, None)
+    return ['docker', '--host', 'unix:///var/run/docker.sock', 'compose', '--env-file', '.env.runtime', '-f', 'compose.deploy.yml'], env
 
 
 def check_stopped(rows):
-    controls = [row for row in rows if row.get('Service') == 'control']
-    if not controls or any(row.get('State') != 'exited' for row in controls):
-        raise RuntimeError('Control must exist and be stopped (exited). No deletion authorized.')
-    if any(row.get('Service') == 'mcp' and row.get('State') != 'exited' for row in rows):
-        raise RuntimeError('MCP must be stopped before cleanup. No deletion authorized.')
-    if any(row.get('Service') == 'gateway' and row.get('State') != 'exited' for row in rows):
-        raise RuntimeError('A legacy gateway may still be writing. No deletion authorized.')
+    for service in ['control', 'mcp']:
+        writers = [row for row in rows if row.get('Service') == service]
+        if not writers or any(row.get('State') != 'exited' for row in writers):
+            raise RuntimeError(f'{service} must exist and be stopped (exited). No deletion authorized.')
 
 
 def require_stopped_control(command, root, env):

@@ -18,6 +18,25 @@ spec.loader.exec_module(setup)
 
 
 class SetupTests(unittest.TestCase):
+    def test_independent_storage_and_search_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            roots = [Path(directory) / name for name in ['first', 'second']]
+            for root in roots:
+                root.mkdir()
+                setup.initialize(root, root.name, '127.0.0.1', 28766, 'test')
+            a, b = [setup.values(root, '.env.runtime') for root in roots]
+            for key in ['S3_ACCESS_KEY', 'S3_SECRET_KEY', 'SEARXNG_SECRET']:
+                self.assertNotEqual(a[key], b[key])
+                self.assertGreaterEqual(len(a[key]), 20)
+
+    def test_invalid_identity_creates_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for identity in ['', '../personal', 'DEV', 'x\nS3_SECRET_KEY=x', 'a' * 33, '-dev']:
+                with self.subTest(identity=identity), self.assertRaises(ValueError):
+                    setup.initialize(root, identity, '127.0.0.1', 28766, 'test')
+                self.assertEqual(list(root.iterdir()), [])
+
     def test_pull_failure_stops_before_start(self):
         def run(args, *unused):
             if 'pull' in args:
@@ -47,8 +66,6 @@ class SetupTests(unittest.TestCase):
                 self.assertEqual((root / name).stat().st_mode & 0o777, 0o600)
             self.assertNotEqual(before['.secrets/mcp-token'], before['.secrets/gateway-token'])
             self.assertEqual(setup.values(root, '.env.control')['GATEWAY_TOKEN'], before['.secrets/gateway-token'].decode().strip())
-            self.assertFalse((root / '.env.search').exists())
-            self.assertFalse((root / '.state/control-rpc').exists())
             self.assertIn('research-mcp-app-test1', before['.env.runtime'].decode())
             with self.assertRaises(FileExistsError):
                 setup.initialize(root, 'example', '127.0.0.1', 18766, 'test1')
@@ -67,7 +84,7 @@ class CollisionTests(unittest.TestCase):
     def test_reserved_namespace_or_port_fails_before_docker(self):
         record = dict(instance='alpha', root='/srv/alpha', host='127.0.0.1', port=8766)
         with patch.object(setup, 'capture') as capture:
-            for identity, port in [('alpha', 8767), ('search-alpha', 8767), ('beta', 8766)]:
+            for identity, port in [('alpha', 8767), ('beta', 8766)]:
                 with self.subTest(identity=identity), self.assertRaises(ValueError):
                     setup.check_collisions(identity, '127.0.0.1', port, [record])
             capture.assert_not_called()
@@ -104,6 +121,27 @@ class CollisionTests(unittest.TestCase):
                 with patch.object(setup, 'ROOT', beta), self.assertRaises(ValueError):
                     setup.reserve_and_initialize('beta', '127.0.0.1', 8766, 'test', 'malgamoe/mcps')
                 self.assertEqual(list(beta.iterdir()), [])
+
+
+class PublishedEndpointTests(unittest.TestCase):
+    def test_authenticated_method_rejection_proves_published_reachability(self):
+        error = setup.urllib.error.HTTPError('http://127.0.0.1:8766/mcp', 405, 'Method not allowed', {}, None)
+        with patch.object(setup, 'values', return_value={'MCP_BIND_HOST': '127.0.0.1', 'MCP_PORT': '8766'}), \
+             patch.object(Path, 'read_text', return_value='test-token'), \
+             patch.object(setup.urllib.request, 'build_opener') as build, patch('builtins.print'):
+            build.return_value.open.side_effect = error
+            setup.check_published_endpoint()
+            request = build.return_value.open.call_args.args[0]
+            self.assertEqual(request.get_header('Authorization'), 'Bearer test-token')
+
+    def test_connection_or_authentication_failure_is_not_healthy(self):
+        for error in [OSError('unreachable'), setup.urllib.error.HTTPError('http://localhost', 401, 'Unauthorized', {}, None)]:
+            with patch.object(setup, 'values', return_value={'MCP_BIND_HOST': '127.0.0.1', 'MCP_PORT': '8766'}), \
+                 patch.object(Path, 'read_text', return_value='test-token'), \
+                 patch.object(setup.urllib.request, 'build_opener') as build:
+                build.return_value.open.side_effect = error
+                with self.assertRaises(ValueError):
+                    setup.check_published_endpoint()
 
 
 class ComposeTests(unittest.TestCase):

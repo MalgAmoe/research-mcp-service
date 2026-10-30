@@ -11,6 +11,8 @@ import secrets
 import socket
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = Path('/var/lib/research-mcp/instances')
@@ -48,7 +50,7 @@ def validate_initialization(root, identity, host, port):
         raise ValueError('Choose an unprivileged MCP port')
     if not root.is_absolute():
         raise ValueError('Use an absolute checkout path')
-    for name in FILES + ['.env.search']:
+    for name in FILES:
         if (root / name).exists() or (root / name).is_symlink():
             raise FileExistsError(f'{name} already exists; use a fresh checkout, not an in-place migration')
     for name in ['.state', '.secrets']:
@@ -118,11 +120,6 @@ def require_admin():
             trusted_path(ROOT / name)
 
 
-def project_names(identity):
-    # Also protect the search namespace used by older deployments.
-    return [f'research-mcp-{identity}', f'research-mcp-search-{identity}']
-
-
 def port_available(host, port):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -132,21 +129,19 @@ def port_available(host, port):
 
 
 def check_collisions(identity, host, port, records):
-    projects = project_names(identity)
+    project = f'research-mcp-{identity}'
     for record in records:
-        if set(projects) & set(project_names(record['instance'])):
+        if identity == record['instance']:
             raise ValueError(f'Instance/project namespace is already reserved at {record["root"]}')
-        if port in {record['port'], record.get('search_port')}:
+        if port == record['port']:
             raise ValueError(f'Port is reserved by {record["instance"]}')
-    for project in projects:
-        for listing in [['ps', '-aq'], ['network', 'ls', '-q'], ['volume', 'ls', '-q']]:
-            if capture(DOCKER + listing + ['--filter', 'label=com.docker.compose.project=' + project]):
-                raise ValueError(f'{project} already owns Docker resources')
-    core, search = projects
+    for listing in [['ps', '-aq'], ['network', 'ls', '-q'], ['volume', 'ls', '-q']]:
+        if capture(DOCKER + listing + ['--filter', 'label=com.docker.compose.project=' + project]):
+            raise ValueError(f'{project} already owns Docker resources')
     named = [
-        (['ps', '-a', '--format', '{{.Names}}'], {f'{core}-{s}-1' for s in ['redis', 's3', 'minio', 'gateway', 'control', 'fetch-worker', 'egress', 'mcp', 'credentials', 'searxng']} | {f'{search}-searxng-1'}),
-        (['network', 'ls', '--format', '{{.Name}}'], {core + '_' + n for n in ['storage', 'egress', 'frontend']} | {search + '_default'}),
-        (['volume', 'ls', '--format', '{{.Name}}'], {core + '_' + v for v in ['redis_data', 's3_data', 'minio_data', 'worker_rpc', 'egress_socket', 'control_api', 'frontend_credentials']}),
+        (['ps', '-a', '--format', '{{.Names}}'], {f'{project}-{s}-1' for s in ['redis', 's3', 'control', 'fetch-worker', 'egress', 'mcp', 'credentials', 'searxng']}),
+        (['network', 'ls', '--format', '{{.Name}}'], {project + '_' + n for n in ['storage', 'egress', 'frontend']}),
+        (['volume', 'ls', '--format', '{{.Name}}'], {project + '_' + v for v in ['redis_data', 's3_data', 'worker_rpc', 'egress_socket', 'control_api', 'frontend_credentials']}),
     ]
     for listing, reserved in named:
         if reserved & set(capture(DOCKER + listing).splitlines()):
@@ -207,6 +202,24 @@ def require_server_setup():
         raise ValueError('Configuration differs from its instance reservation; inspect before proceeding')
 
 
+def check_published_endpoint():
+    env = values(ROOT, '.env.mcp')
+    token = (ROOT / '.secrets/mcp-token').read_text().strip()
+    request = urllib.request.Request(f'http://{env["MCP_BIND_HOST"]}:{env["MCP_PORT"]}/mcp',
+        headers={'Authorization': 'Bearer ' + token, 'Accept': 'text/event-stream'})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=5) as response:
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+    except OSError:
+        raise ValueError('Published MCP endpoint is unreachable from the host') from None
+    if status not in (200, 405):
+        raise ValueError(f'Published MCP endpoint check failed (HTTP {status})')
+    print('Published MCP endpoint is reachable and accepts authentication.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
@@ -231,6 +244,7 @@ def main():
             run(compose() + ['pull'], '.env.runtime')
         run(compose() + ['up', '-d', '--pull', 'never', '--wait', '--wait-timeout', '300'], '.env.runtime')
     elif args.action == 'check':
+        check_published_endpoint()
         run(compose() + ['exec', '-T', 'mcp', 'python', '-m', 'research_mcp_service.container_check'] + (['--live'] if args.live else []), '.env.runtime')
     else:
         run(compose() + ['ps' if args.action == 'status' else 'stop'], '.env.runtime')

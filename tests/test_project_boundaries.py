@@ -1,12 +1,31 @@
 """Offline repository/deployment checks. Never starts containers."""
+import importlib.util
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def compose_configuration():
+    spec = importlib.util.spec_from_file_location('boundary_setup', ROOT / 'scripts/setup_server.py')
+    setup = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        setup.initialize(root, 'offline-tests', '127.0.0.1', 28766, 'offline')
+        shutil.copyfile(ROOT / 'compose.deploy.yml', root / 'compose.deploy.yml')
+        (root / 'infra').mkdir()
+        shutil.copyfile(ROOT / 'infra/searxng-primary.yml', root / 'infra/searxng-primary.yml')
+        runtime = setup.values(root, '.env.runtime')
+        env = {k: v for k, v in os.environ.items() if k not in runtime and not k.startswith('COMPOSE_')}
+        raw = subprocess.check_output(['docker', 'compose', '--env-file', '.env.runtime',
+            '-f', 'compose.deploy.yml', 'config', '--format', 'json'], cwd=root, env=env, text=True)
+        return json.loads(raw), root
 
 
 class ProjectBoundaryTests(unittest.TestCase):
@@ -28,40 +47,32 @@ class ProjectBoundaryTests(unittest.TestCase):
         self.assertNotIn('[tool.uv.sources]', (ROOT / 'pyproject.toml').read_text())
 
     @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable; daemon not needed')
-    def test_search_stack_is_separate_and_loopback_only(self):
-        env = {key: value for key, value in os.environ.items() if not key.startswith('COMPOSE_')}
-        env.update(MCP_INSTANCE_ID='offline-tests', MCP_SEARCH_PORT='18080',
-                   SEARXNG_SECRET='test-only-not-for-deployment')
-        raw = subprocess.check_output(['docker', 'compose', '--env-file', os.devnull,
-            '-f', str(ROOT / 'compose.search.yml'), 'config', '--format', 'json'],
-            cwd=ROOT, env=env, text=True)
-        config = json.loads(raw)
-        self.assertEqual(config['name'], 'research-mcp-search-offline-tests')
-        self.assertEqual(set(config['services']), {'searxng'})
-        self.assertFalse(config.get('volumes'))
-        service = config['services']['searxng']
-        self.assertEqual(service['ports'][0]['host_ip'], '127.0.0.1')
-        self.assertEqual(int(service['ports'][0]['published']), 18080)
-        for mount in service['volumes']:
-            self.assertTrue(Path(mount['source']).resolve().is_relative_to(ROOT))
+    def test_only_mcp_is_published(self):
+        config, root = compose_configuration()
+        self.assertEqual(config['name'], 'research-mcp-offline-tests')
+        self.assertEqual({name for name, service in config['services'].items() if service.get('ports')}, {'mcp'})
+        self.assertEqual(config['services']['mcp']['sysctls']['net.ipv4.conf.all.arp_ignore'], '0')
+        self.assertNotEqual(config['services']['mcp'].get('network_mode'), 'host')
+        port = config['services']['mcp']['ports'][0]
+        self.assertEqual(port['host_ip'], '127.0.0.1')
+        self.assertEqual(int(port['published']), 28766)
+        self.assertEqual(set(config['services']['searxng']['networks']), {'frontend'})
+        for mount in config['services']['searxng']['volumes']:
+            self.assertTrue(Path(mount['source']).is_relative_to(root))
             self.assertTrue(mount['read_only'])
 
     @unittest.skipUnless(shutil.which('docker'), 'Docker CLI unavailable; daemon not needed')
-    def test_compose_has_private_project_scoped_storage(self):
-        env = {key: value for key, value in os.environ.items() if not key.startswith('COMPOSE_')}
-        env.update(TENANT_ID='offline-tests', S3_ACCESS_KEY='test-only-user',
-                   S3_SECRET_KEY='test-only-not-for-deployment', SEARXNG_SECRET='test-only-not-for-deployment')
-        raw = subprocess.check_output(['docker', 'compose', '--env-file', os.devnull,
-            '-f', str(ROOT / 'docker-compose.yml'), 'config', '--format', 'json'],
-            cwd=ROOT, env=env, text=True)
-        config = json.loads(raw)
-        self.assertEqual(config['name'], 'research-mcp-offline-tests')
+    def test_private_project_scoped_storage(self):
+        config, root = compose_configuration()
+        self.assertTrue(config['networks']['storage']['internal'])
+        for name in ['control', 'redis', 's3']:
+            self.assertEqual(set(config['services'][name]['networks']), {'storage'})
+        self.assertEqual(config['services']['fetch-worker']['network_mode'], 'none')
         for service in config['services'].values():
-            self.assertFalse(service.get('ports'))
             self.assertFalse(service.get('extra_hosts'))
             for mount in service.get('volumes', []):
                 if mount['type'] == 'bind':
-                    self.assertTrue(Path(mount['source']).resolve().is_relative_to(ROOT))
+                    self.assertTrue(Path(mount['source']).is_relative_to(root))
                     self.assertTrue(mount.get('read_only'))
         for volume in config['volumes'].values():
             self.assertFalse(volume.get('external'))

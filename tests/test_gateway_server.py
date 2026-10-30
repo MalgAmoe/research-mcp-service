@@ -8,7 +8,7 @@ from research_mcp_service.server import BearerAuth
 
 
 class HostedRoutesTests(unittest.IsolatedAsyncioTestCase):
-    async def test_auth_and_legacy_fetch_routes_fail_closed(self):
+    async def test_auth_and_disallowed_routes_fail_closed(self):
         async def backend(scope, receive, send):
             await JSONResponse({'ok': True})(scope, receive, send)
         app = BearerAuth(HostedRoutes(backend), 't' * 48)

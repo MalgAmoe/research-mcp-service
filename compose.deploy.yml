@@ -43,6 +43,10 @@ services:
   mcp:
     <<: *app
     networks: [frontend]
+    # Keep host-specific ARP hardening from breaking published-address reachability.
+    # This sysctl is scoped to the container network namespace, not the host.
+    sysctls:
+      net.ipv4.conf.all.arp_ignore: "0"
     mem_limit: 512m
     cpus: 1
     pids_limit: 128

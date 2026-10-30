@@ -48,7 +48,7 @@ python3 scripts/setup_server.py check
 python3 scripts/setup_server.py check --live
 ```
 
-Checks run inside the frontend container, with no host application packages or model calls. The live check saves a test page and closes only its own browser sessions; it does not certify every provider/site. The default check verifies authenticated discovery and private control/Redis calls.
+The helper first checks the published endpoint from the host using standard-library Python, then runs tool checks inside the frontend container. No host application packages or model calls are needed. The live check saves a test page and closes only its own browser sessions; it does not certify every provider/site. The default check verifies authenticated discovery and private control/Redis calls.
 
 `up` validates Compose, pulls the selected images and starts the stack with a bounded health wait. A pull failure stops before container startup; there is no cached-image substitution. `up --no-pull` restarts already downloaded images and refuses implicit pulls; it is not a workaround for an incomplete installation.
 
@@ -76,7 +76,7 @@ The frontend waits for authenticated Redis/S3/worker readiness and a clear maint
 
 For updates: coordinate downtime and back up configuration plus consistent stopped-storage volumes. Record source revision and image references. Stop the stack, review/pull the intended repository revision and set the three image references in `.env.runtime` to the matching versioned release (or digest-pinned references), then run `up` and checks. Source/configuration and images must match. No automatic rollback is promised; storage changes can require a compatible data backup. Never use `down -v` or Docker prune as routine maintenance.
 
-This workflow **does not migrate existing host-runtime or MinIO installations**. Do not initialize over them or pull/recreate them blindly. Preserve existing credentials/data and plan an explicit migration or approved reset. Never mount MinIO's data directory into SeaweedFS. The existing local development Compose files remain for that running installation; `compose.deploy.yml` is the fresh deployment entry point.
+`compose.deploy.yml` is the only supported deployment layout. Initialization refuses existing configuration; there are no old-layout compatibility files or automatic data migrations. Never mount another storage engine's data directory into SeaweedFS. Preserve credentials/data unless an explicit reset has been approved.
 
 ## Manual retention
 

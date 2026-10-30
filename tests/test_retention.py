@@ -33,10 +33,10 @@ class RetentionTests(unittest.TestCase):
         chosen = object_candidates(objects, {'shared'}, {'shared', 'expired'}, self.cutoff)
         self.assertEqual({obj['uri'] for obj in chosen}, {'old-orphan', 'expired'})
 
-    def test_legacy_strategy_names_do_not_block_retention(self):
+    def test_unrelated_metadata_does_not_change_artifact_references(self):
         doc = StoredDocument.model_validate({'retrieved_at': self.now.isoformat(),
-            'strategy_used': 'scrapling', 'artifacts': {'legacy_artifact': 's3://test/legacy'}})
-        self.assertEqual(doc.artifacts['legacy_artifact'], 's3://test/legacy')
+            'strategy_used': 'light', 'title': 'Sample page', 'artifacts': {'original': 's3://test/original'}})
+        self.assertEqual(doc.artifacts['original'], 's3://test/original')
 
     def test_inventory_rss_uses_fetch_not_publication_age(self):
         redis = MagicMock(); artifacts = MagicMock()

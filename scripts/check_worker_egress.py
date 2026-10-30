@@ -1,4 +1,4 @@
-"""Real network check, run only in compose.workers.yml's network-none container."""
+"""Real network check, run only in compose.deploy.yml's network-none fetch-worker container."""
 import json
 import socket
 import subprocess

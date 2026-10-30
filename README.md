@@ -12,7 +12,7 @@ Research service with **34 MCP tools** for search, page reading, document conver
 
 | Component | Source / deployment |
 | --- | --- |
-| MCP frontend, control and one-time credential setup | Shared app image built from `Dockerfile.control`, separate containers/permissions |
+| MCP frontend, control and one-time credential setup | Shared app image built from `Dockerfile.app`, separate containers/permissions |
 | Chromium/Camoufox and document execution | Worker image built from `Dockerfile.worker`, network-none |
 | Restricted web-access proxy | Egress image built from `Dockerfile.egress` |
 | Dedicated search | Pinned upstream SearXNG image |
@@ -20,7 +20,7 @@ Research service with **34 MCP tools** for search, page reading, document conver
 
 **`compose.deploy.yml` is the default deployment entry point.** `scripts/setup_server.py` initializes private configuration and operates the stack using published images from `malgamoe/mcps`; no host application virtualenv or application systemd unit is needed. Only MCP publishes a port. Browsers receive no storage credentials or storage-network access; no application has Docker access.
 
-Follow [INSTALL.md](INSTALL.md) for a fresh administrator-owned deployment. The VPS uses this layout. The existing local installation still uses the older host-runtime layout described in LIVE-STATUS.md; do not initialize over it.
+Follow [INSTALL.md](INSTALL.md) for a fresh administrator-owned deployment. Both the local installation and VPS use this layout. Initialization refuses existing configuration; it is not an in-place migration command.
 
 ## Tools and behavior
 
@@ -50,10 +50,6 @@ Offline tests exercise the production text-only MCP format, search → batch res
 The published images passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM, followed by a clean VPS installation. See LIVE-STATUS.md for exact verification and limits; these checks are not a production soak.
 
 Clients use their configured MCP URL and `Authorization: Bearer <token>` in protected client settings. Reconnect after schema changes. `health` checks MCP connectivity, not backend health. Never copy credentials between independent deployments.
-
-### Legacy local compatibility
-
-The older Compose overlays, `scripts/init_{mcp,search,storage}.py` and their compatibility tests remain while the existing local host-runtime installation is still in use. They are **not the fresh-install workflow**. Its commands and active PID/log locations are confined to LIVE-STATUS.md. Removing that machinery requires a separately coordinated local migration; repository cleanup must not break the running service.
 
 Preserve `.env*`, `.secrets/`, `.state/` evidence and Docker data volumes. Never print secrets or use `docker compose down -v` as cleanup. Manual cache retention is available through `python3 scripts/retention.py` (read-only dry run by default); see INSTALL.md for pinning, stopped-writer checks and failure recovery. No automatic retention is enabled. Do not restart workers while users are testing without coordinating the interruption.
 

@@ -20,47 +20,44 @@ class HostRetentionTests(unittest.TestCase):
                 host.check_stopped([{'Service': 'control', 'State': state}])
         with self.assertRaises(RuntimeError):
             host.check_stopped([])
-        host.check_stopped([{'Service': 'control', 'State': 'exited'}])
         with self.assertRaises(RuntimeError):
-            host.check_stopped([{'Service': 'control', 'State': 'exited'}, {'Service': 'gateway', 'State': 'running'}])
+            host.check_stopped([{'Service': 'control', 'State': 'exited'}])
+        host.check_stopped([{'Service': 'control', 'State': 'exited'}, {'Service': 'mcp', 'State': 'exited'}])
 
     def test_inspection_ignores_oneoff_but_not_real_control(self):
-        def container(oneoff, status):
+        def container(oneoff, status, service='control'):
             return {'Config': {'Labels': {'com.docker.compose.oneoff': oneoff,
-                                          'com.docker.compose.service': 'control'}}, 'State': {'Status': status}}
+                                          'com.docker.compose.service': service}}, 'State': {'Status': status}}
         for state in ['running', 'exited']:
             with patch.object(host.subprocess, 'check_output', side_effect=['main\nprobe\n',
-                 json.dumps([container('False', state), container('True', 'running')])]):
+                 json.dumps([container('False', state), container('True', 'running'), container('False', 'exited', 'mcp')])]):
                 if state == 'running':
                     with self.assertRaises(RuntimeError):
                         host.require_stopped_control(['docker', 'compose'], Path('/tmp'), {})
                 else:
                     host.require_stopped_control(['docker', 'compose'], Path('/tmp'), {})
 
-    def test_both_layouts_and_shell_project_overrides(self):
+    def test_unknown_layout_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / '.env.runtime').write_text('TENANT_ID=own\nS3_SECRET_KEY=test\n')
-            for setting in ['', 'MCP_GATEWAY_SOCKET=/private/control.sock\n']:
-                (root / '.env.mcp').write_text(setting)
-                with patch.dict('os.environ', {'TENANT_ID': 'other', 'COMPOSE_PROJECT_NAME': 'other'}):
-                    command, env = host.deployment(root)
-                self.assertEqual('compose.server.yml' in command, bool(setting))
-                self.assertNotIn('TENANT_ID', env)
-                self.assertNotIn('COMPOSE_PROJECT_NAME', env)
+            for marker in ['', 'DEPLOYMENT_LAYOUT=unknown\n']:
+                (root / '.env.runtime').write_text(marker + 'TENANT_ID=own\n')
+                with self.assertRaises(ValueError):
+                    host.deployment(root)
 
     def test_image_only_layout_and_frontend_stop_guard(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / '.env.runtime').write_text('DEPLOYMENT_LAYOUT=compose-v1\nTENANT_ID=own\n')
             (root / '.env.mcp').write_text('MCP_GATEWAY_SOCKET=/control-api/gateway.sock\n')
-            with patch.dict('os.environ', {'DOCKER_HOST': 'tcp://other:2375'}):
+            with patch.dict('os.environ', {'DOCKER_HOST': 'tcp://other:2375', 'TENANT_ID': 'other', 'COMPOSE_PROJECT_NAME': 'other'}):
                 command, env = host.deployment(root)
             self.assertIn('compose.deploy.yml', command)
-            self.assertNotIn('compose.server.yml', command)
+            self.assertNotIn('TENANT_ID', env)
+            self.assertNotIn('COMPOSE_PROJECT_NAME', env)
             self.assertNotIn('DOCKER_HOST', env)
             self.assertIn('unix:///var/run/docker.sock', command)
-        with self.assertRaisesRegex(RuntimeError, 'MCP must be stopped'):
+        with self.assertRaisesRegex(RuntimeError, 'mcp must exist and be stopped'):
             host.check_stopped([{'Service': 'control', 'State': 'exited'}, {'Service': 'mcp', 'State': 'running'}])
 
     def test_dry_run_never_checks_or_stops_writers(self):
