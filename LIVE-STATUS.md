@@ -6,12 +6,12 @@ Setup and maintenance commands: [INSTALL.md](INSTALL.md). Architecture: [DESIGN.
 
 | Installation | Source revision | MCP access | Control connection | Startup |
 |---|---|---|---|---|
-| Local development | 283b6f2 | `http://100.69.41.80:8766/mcp`, bearer authentication | Internal container TCP | Background process |
+| Local development | d3bbb97 | `http://100.69.41.80:8766/mcp`, bearer authentication | Internal container TCP | Background process |
 | Ubuntu VPS | 3ca1223 | HTTPS reverse proxy, bearer authentication; backend loopback | Private Unix socket | Enabled user-systemd service |
 
 Both expose 34 tools and have separate credentials, caches and browser sessions. The original personal gateway is a separate service.
 
-The repository's named MinIO release and early-pull preflight changes are not deployed to either installation.
+Local storage uses SeaweedFS 4.51 with fresh S3/Redis data; old local cache IDs are no longer available. Its MinIO container/volume were removed. The VPS still uses its existing MinIO deployment and has not received these source/configuration changes.
 
 ## Local development operations
 
@@ -31,9 +31,9 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 
 ## Verification
 
-- Local: live search/acquisition, saved passages/headings, browser history/condition waits, screenshot-limit fallback, PDF annotation links and RSS preview checked.
+- Local SeaweedFS deployment: 34-tool discovery, S3 capabilities, live search/page acquisition, artifact storage/retrieval, Chromium, Camoufox and retention dry run passed. Worker/control containers rebuilt; storage remains private.
 - VPS: application/browser builds, 119 offline tests, live search, page storage/retrieval, Chromium/Camoufox, proxy isolation and retention dry run checked.
-- Current repository: 121 offline tests pass.
+- Current repository: 122 offline tests pass, including rejection of S3 credentials by the isolated worker.
 - VPS reboot recovery verified: SSH returned in 22 seconds, HTTPS/MCP in 38 seconds; cached document retrieval, search call and Chromium passed afterward. No failed system services; a provider cloud-init deprecation warning remains.
 - Public TLS, bearer rejection and certificate-renewal/reload dry run passed. Renewal checks run every six hours.
 - Destructive retention execution on real data remains untested.
@@ -41,13 +41,14 @@ VPS-specific connection and service commands are in private `.state/CONTABO.md`.
 
 ## Operational limits
 
-- The configured MinIO release could not be pulled from official registries. The VPS currently has a cached official image. Fresh setup stops at image-pull failure; verify an accessible image source before proceeding.
+- Fresh installs use a release/digest-pinned SeaweedFS image, successfully pulled locally. The complete fresh-server workflow with SeaweedFS has not yet been repeated on a clean VPS. Existing MinIO installations need an explicit migration or approved reset before updating; see INSTALL.md.
 - Automatic cleanup is disabled. Use `python3 scripts/retention.py` for a read-only inventory; apply requires stopped writers and the guarded maintenance workflow in INSTALL.md.
 - Cache IDs are not archives; refresh can replace cached content. Export irreplaceable evidence separately.
 - Browser observations and successful extraction do not certify completeness or readiness. Full backend document retrieval still has a 2 MiB ceiling before passage slicing.
 
 ## Diagnostic logs
 
-Local deployment: `.state/deploy-283b6f2.log`, `.state/check-283b6f2.log`, `.state/tests-deploy-283b6f2.log`.
-Retention: `.state/retention-dry-run.log`, `.state/tests-retention-host.log`.
+Local deployment/checks: `.state/deploy-seaweed/build.log`, `.state/deploy-seaweed/finish.log`, `.state/deploy-seaweed/tests.log`.
+Retention: `.state/deploy-seaweed/retention-dry-run.log`.
+MCP/worker source snapshot: `sha256:dfdf7b759f33a1b8eda861d2611907462043581096d81d45ea6efde3a5436f6a`.
 VPS: locations recorded in `.state/CONTABO.md`.
