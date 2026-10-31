@@ -2,7 +2,7 @@
 
 One owner per stack. Docker runs the MCP frontend, search, control, browser worker, egress proxy, Redis and S3 storage. There is **no host application virtualenv, application systemd unit or runtime Docker access**. Docker administrators remain trusted. Optional public TLS: [HTTPS.md](HTTPS.md).
 
-**Published candidate:** `rss-unsubscribe-20261031-104428` (Linux amd64), built from source revision `dda1475` and published publicly in `malgamoe/mcps`. Adds RSS unsubscribe (35 tools). Packaged tests, offline Chromium/Camoufox checks and anonymous digest pulls passed. Live rollout and full-stack/reboot checks of these exact images are pending. The local/VPS installations still use the preceding candidate; its earlier VM verification and current deployment pins are recorded in [LIVE-STATUS.md](LIVE-STATUS.md).
+**Published candidate:** `rss-unsubscribe-20261031-104428` (Linux amd64), built from source revision `dda1475` and published publicly in `malgamoe/mcps`. Adds RSS unsubscribe (35 tools). Packaged tests, offline Chromium/Camoufox checks and anonymous digest pulls passed. App-only updates passed live checks locally and on the VPS, retaining the previous worker/egress images. A fresh all-new-image stack and actual-host reboot checks remain unverified. Earlier VM verification and the exact current deployment mix are recorded in [LIVE-STATUS.md](LIVE-STATUS.md).
 
 Commands below run from the repository root, not the `docs/` directory.
 
@@ -90,7 +90,7 @@ docker compose --env-file .env.runtime -f compose.deploy.yml up -d --no-deps --p
 python3 scripts/setup_server.py check
 ```
 
-For a local user-owned checkout, run the container check directly (`docker compose --env-file .env.runtime -f compose.deploy.yml exec -T mcp python -m research_mcp_service.container_check`) and verify the published endpoint with the existing client. Confirm 35 tools and unsubscribe behavior, then refresh client tool discovery. Rollback for this schema-preserving update is restoring the previous app reference and recreating only these same two services. Cached data and browser workers are not reset. This rollout procedure has not yet been exercised on the live installations.
+For a local user-owned checkout, run the container check directly (`docker compose --env-file .env.runtime -f compose.deploy.yml exec -T mcp python -m research_mcp_service.container_check`) and verify the published endpoint with the existing client. Confirm 35 tools and unsubscribe behavior, then refresh client tool discovery. Rollback for this schema-preserving update is restoring the previous app reference and recreating only these same two services. Cached data and browser workers are not reset. This app-only procedure passed on both live installations: authenticated 35-tool discovery, RSS unsubscribe/read-state preservation, search, saved-page retrieval and Chromium/Camoufox. VPS public HTTPS also passed. Existing credentials, sampled cached records and all other containers were preserved.
 
 ## Manual retention
 

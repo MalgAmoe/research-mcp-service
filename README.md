@@ -8,7 +8,7 @@ Research service with **35 MCP tools** for search, page reading, document conver
 - [DESIGN.md](docs/DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](docs/ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
-**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. Existing local/VPS installations still expose 34 tools until a coordinated frontend/control update. Image digests: [INSTALL.md](docs/INSTALL.md); deployment state and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
+**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. Both local/VPS frontends and controls now expose 35 tools; their existing browser-worker and egress images were retained. Image digests: [INSTALL.md](docs/INSTALL.md); deployment state and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
 
 ## Runtime
 
@@ -49,7 +49,7 @@ uv sync --locked --no-dev
 
 Offline tests exercise the production text-only MCP format, search → batch research orchestration, extraction/presentation regressions, storage maintenance and runtime safety boundaries. Tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
 
-The previous candidate passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM, followed by a clean VPS installation. The new RSS candidate passed packaged tests, offline browser checks and anonymous digest pulls; its live rollout is pending. See [LIVE-STATUS.md](docs/LIVE-STATUS.md) for exact verification and limits; these checks are not a production soak.
+The previous candidate passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM, followed by a clean VPS installation. The RSS candidate passed packaged tests, offline browser checks and anonymous digest pulls. App-only updates passed live RSS, search, saved-page retrieval and both-browser checks locally and on the VPS; browser workers were not restarted. See [LIVE-STATUS.md](docs/LIVE-STATUS.md) for exact verification and limits; these checks are not a production soak.
 
 Clients use their configured MCP URL and `Authorization: Bearer <token>` in protected client settings. Reconnect after schema changes. `health` checks MCP connectivity, not backend health. Never copy credentials between independent deployments.
 

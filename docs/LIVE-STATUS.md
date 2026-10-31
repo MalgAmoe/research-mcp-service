@@ -2,21 +2,21 @@
 
 Setup and maintenance: [INSTALL.md](INSTALL.md). Architecture: [DESIGN.md](DESIGN.md). Tools: [README.md](../README.md).
 
-## Published update; rollout pending
+## RSS unsubscribe update
 
 Candidate `rss-unsubscribe-20261031-104428`, built from `dda1475`, is public in `malgamoe/mcps`; exact digests and update commands are in [INSTALL.md](INSTALL.md). It adds `rss_unsubscribe(feed_url)` (35 tools): idempotent subscription removal preserving cached entries/read states, with an atomic guard against in-flight fetch re-subscription.
 
-142 host tests and a separate real Redis fixture check pass. The worker image passed the suite with two Docker-CLI-only tests skipped; the app image passed 22 RSS/MCP tests. Offline Chromium/Camoufox launch/content checks, egress imports, anonymous registry manifest checks and anonymous digest pulls passed (local image layers were cached). These exact images have not yet undergone a full Compose rollout or reboot check.
+142 host tests and a separate real Redis fixture check pass. The worker image passed the suite with two Docker-CLI-only tests skipped; the app image passed 22 RSS/MCP tests. Offline Chromium/Camoufox launch/content checks, egress imports, anonymous registry manifest checks and anonymous digest pulls passed (local image layers were cached). The new app image has passed live app-only rollouts; the newly published worker/egress images have not been deployed. A fresh all-new-image stack and actual-host reboot checks remain unverified.
 
-Both live deployments remain unchanged at 34 tools. Enabling unsubscribe requires a coordinated frontend/control update, not a cache reset or browser-worker restart.
+Both live deployments now expose 35 tools. Only frontend/control containers were recreated. Authenticated published-endpoint checks, unsubscribe/repeat/resubscribe behavior, cached RSS entry/read-state preservation, search, saved-page retrieval and Chromium/Camoufox passed. VPS public HTTPS authentication and external anonymous rejection/certificate validation passed. Existing credentials, sampled saved records, browser workers and all other containers were preserved. Disposable RSS probe records were removed after verification.
 
 ## Running installations
 
-Both installations use **`compose.deploy.yml`**, the published `candidate-20261030-181946` images and private Redis/SeaweedFS 4.51 storage. Current deployment digests are below; INSTALL.md lists the newer, not-yet-deployed candidate. They expose 34 tools with separate credentials, caches and browser workers; neither shares resources with the original personal gateway.
+Both installations use **`compose.deploy.yml`**, the `rss-unsubscribe-20261031-104428` app image, retained `candidate-20261030-181946` worker/egress images, and private Redis/SeaweedFS 4.51 storage. Current deployment digests are below; INSTALL.md lists the complete newly published candidate and the verified app-only update procedure. They expose 35 tools with separate credentials, caches and browser workers; neither shares resources with the original personal gateway.
 
 | Current image | SHA-256 digest (`malgamoe/mcps`) |
 |---|---|
-| App | `b3a026c1be9a84347d170944707d1d9ccc43abe1ded06df640638726446a79df` |
+| App | `5cfd08a1b0834ca226f4d568600ea5653c79a389bff82eb1ebe9ee54ee4d8524` |
 | Worker | `ede7f5f79e95215080d02c9fa1c89cf80747055633282edc8e746109a38b07f8` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
@@ -47,7 +47,7 @@ VPS connection, certificate and service commands: private `.state/CONTABO.md`. T
 
 ## Verified behavior
 
-- The deployed release's deployment/maintenance tooling passed 136 offline tests, including published-endpoint failure handling and the requirement that both MCP and control be stopped before deletion.
+- Current source passes 142 offline tests, including published-endpoint failure handling and the requirement that both MCP and control be stopped before deletion.
 
 - The previous `candidate-20261030-181946` images were pulled anonymously by exact digest into a disposable Ubuntu VM. Two independent deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation and frontend denial of another owner's storage network.
 - Both VM stacks recovered after reboot without provisioning: saved evidence remained available, old browser handles expired and fresh browser/API checks passed.
@@ -67,6 +67,8 @@ VPS connection, certificate and service commands: private `.state/CONTABO.md`. T
 ## Private evidence
 
 - `.state/compose-release/`: build/publication, anonymous pull, two-owner/reboot and HTTPS/RSS/retention test records. Exact digests: `public-images.json`.
+- `.state/rss-unsubscribe-release/`: new-image build/publication and packaged/browser checks.
+- `.state/rss-unsubscribe-rollout/` on each checkout: app-only update logs, before/after container identities, sampled-record checksums and the previous private runtime configuration for rollback. Both final exit codes are 0.
 - `.state/local-compose-reset/`: local reset outcome and initial/retry logs.
 - `.state/deploy-seaweed/`, `.state/evidence/`: selected earlier storage/security checks.
 - VPS migration logs: paths in `.state/CONTABO.md`.
