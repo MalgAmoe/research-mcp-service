@@ -2,6 +2,10 @@
 
 Setup and maintenance: [INSTALL.md](INSTALL.md). Architecture: [DESIGN.md](DESIGN.md). Tools: [README.md](../README.md).
 
+## Pending app update
+
+Source adds `rss_unsubscribe(feed_url)` (35 tools): idempotent subscription removal preserving cached entries/read states, with an atomic guard against in-flight fetch re-subscription. 142 offline tests and a separate real Redis fixture check pass. The running/pinned images below still expose 34 tools; no live deployment has been changed for this feature. Release requires a new app image and coordinated frontend/control restart, not a cache reset or browser-worker restart.
+
 ## Running installations
 
 Both installations use **`compose.deploy.yml`**, the published `candidate-20261030-181946` images and private Redis/SeaweedFS 4.51 storage. Exact image digests are in INSTALL.md. They expose 34 tools with separate credentials, caches and browser workers; neither shares resources with the original personal gateway.
@@ -33,7 +37,7 @@ VPS connection, certificate and service commands: private `.state/CONTABO.md`. T
 
 ## Verified behavior
 
-- Current deployment/maintenance tooling passes 136 offline tests, including published-endpoint failure handling and the requirement that both MCP and control be stopped before deletion.
+- The deployed release's deployment/maintenance tooling passed 136 offline tests, including published-endpoint failure handling and the requirement that both MCP and control be stopped before deletion.
 
 - Published images were pulled anonymously by exact digest into a disposable Ubuntu VM. Two independent deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation and frontend denial of another owner's storage network.
 - Both VM stacks recovered after reboot without provisioning: saved evidence remained available, old browser handles expired and fresh browser/API checks passed.

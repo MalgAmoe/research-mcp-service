@@ -244,6 +244,18 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
         """Subscribe to a public RSS/Atom feed in your private environment."""
         return await request('POST', '/rss/subscribe', payload={'feed_url': feed_url})
 
+    @server.tool(annotations={'readOnlyHint': False, 'destructiveHint': True,
+                              'idempotentHint': True, 'openWorldHint': False})
+    async def rss_unsubscribe(feed_url: Url) -> dict[str, Any]:
+        """Remove a feed subscription without deleting cached entries or read states.
+
+        Safe to repeat; unsubscribed is false if it was already absent. Use the exact
+        URL from rss_list. Preserved entries remain accessible by feed URL or entry ID;
+        unfiltered rss_entries lists subscribed feeds only. Explicit rss_fetch or
+        rss_subscribe registers the feed again; an already-running fetch does not.
+        """
+        return await request('POST', '/rss/unsubscribe', payload={'feed_url': feed_url})
+
     @server.tool(annotations=LOCAL_READ)
     async def rss_list() -> dict[str, Any]:
         """List your saved feed subscriptions without fetching them."""
@@ -252,7 +264,7 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
     @server.tool(annotations=FETCH)
     async def rss_fetch(feed_url: Url, max_entries: Annotated[int, Field(ge=1, le=100)] = 20,
                         force_refresh: bool = False) -> dict[str, Any]:
-        """Fetch and save feed entries; registers unknown feeds, even when recording a fetch failure.
+        """Fetch and save feed entries; subscribes first, including previously unsubscribed feeds.
 
         Always contacts the feed; force_refresh is currently a compatibility no-op.
         Feed content may be only a summary. Existing entries/read state are not replaced.
@@ -263,7 +275,10 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
     @server.tool(annotations=LOCAL_READ)
     async def rss_entries(feed_url: Url | None = None, limit: Annotated[int, Field(ge=1, le=200)] = 50,
                           include_read: bool = False) -> dict[str, Any]:
-        """List cached feed entries, optionally by feed or read state. Does not fetch external URLs."""
+        """List cached entries; without feed_url, only subscribed feeds are included.
+
+        Supply feed_url to retrieve retained entries after unsubscribe. Does not fetch URLs.
+        """
         params = {'limit': limit, 'include_read': include_read}
         if feed_url is not None:
             params['feed_url'] = feed_url

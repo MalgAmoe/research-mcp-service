@@ -32,6 +32,7 @@ from .models import (
     RssFeed,
     RssFeedEntry,
     RssFetchResponse,
+    RssUnsubscribeResponse,
     SearchResult,
     SearchAttempt,
     SearchWebRequest,
@@ -1023,11 +1024,15 @@ def _entry_id(feed_url: str, entry_link: str | None, entry_title: str | None, pu
 async def rss_subscribe(feed_url: str) -> RssFeed:
     key = _feed_key(feed_url)
     existing = await redis_store.get_rss_feed(key)
-    if existing:
-        return existing
-    feed = RssFeed(feed_url=feed_url)
+    feed = existing or RssFeed(feed_url=feed_url,
+                               entry_count=len(await redis_store.get_rss_entry_ids(key)))
     await redis_store.save_rss_feed(key, feed)
     return feed
+
+
+async def rss_unsubscribe(feed_url: str) -> RssUnsubscribeResponse:
+    removed = await redis_store.unsubscribe_rss_feed(_feed_key(feed_url))
+    return RssUnsubscribeResponse(feed_url=feed_url, unsubscribed=removed)
 
 
 async def rss_list_feeds() -> list[RssFeed]:
@@ -1036,16 +1041,16 @@ async def rss_list_feeds() -> list[RssFeed]:
 
 async def rss_fetch(feed_url: str, max_entries: int = 20, force_refresh: bool = False) -> RssFetchResponse:
     key = _feed_key(feed_url)
-    feed = await redis_store.get_rss_feed(key)
-    if not feed:
-        feed = RssFeed(feed_url=feed_url)
+    # Explicit fetch registers the feed before network I/O. Completion only updates
+    # a still-active subscription, so a later unsubscribe wins over this fetch.
+    feed = await rss_subscribe(feed_url)
 
     try:
         parsed = await _fetch_parsed_feed(feed_url)
     except GatewayError as exc:
         feed = feed.model_copy(update={"fetch_status": "error", "fetch_error": exc.message,
                                        "last_fetched_at": datetime.now(timezone.utc)})
-        await redis_store.save_rss_feed(key, feed)
+        await redis_store.update_subscribed_rss_feed(key, feed)
         raise
 
     feed_title = parsed.get("title")
@@ -1081,7 +1086,7 @@ async def rss_fetch(feed_url: str, max_entries: int = 20, force_refresh: bool = 
         "fetch_error": None,
         "entry_count": len(await redis_store.get_rss_entry_ids(key)),
     })
-    await redis_store.save_rss_feed(key, feed)
+    await redis_store.update_subscribed_rss_feed(key, feed)
     return RssFetchResponse(feed=feed, entries=entries, new_entries=new_count)
 
 

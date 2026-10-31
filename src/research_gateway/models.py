@@ -210,6 +210,16 @@ class RssSubscribeRequest(BaseModel):
     feed_url: str = Field(min_length=1)
 
 
+class RssUnsubscribeRequest(BaseModel):
+    feed_url: str = Field(min_length=1, max_length=8192)
+
+
+class RssUnsubscribeResponse(BaseModel):
+    feed_url: str
+    unsubscribed: bool
+    cached_entries_preserved: Literal[True] = True
+
+
 class RssFetchRequest(BaseModel):
     feed_url: str = Field(min_length=1)
     max_entries: int = Field(default=20, ge=1, le=100)

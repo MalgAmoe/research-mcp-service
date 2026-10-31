@@ -22,6 +22,8 @@ from .models import (
     RssFetchResponse,
     RssListResponse,
     RssSubscribeRequest,
+    RssUnsubscribeRequest,
+    RssUnsubscribeResponse,
 )
 from .storage import artifact_store, redis_store
 from .services import (
@@ -37,6 +39,7 @@ from .services import (
     rss_mark_read,
     rss_preview,
     rss_subscribe,
+    rss_unsubscribe,
 )
 
 app = FastAPI(
@@ -226,6 +229,11 @@ async def api_rss_subscribe(req: RssSubscribeRequest) -> RssFeed:
         return feed
     except Exception as exc:
         raise HTTPException(status_code=500, detail={"code": "rss_subscribe_failed", "message": str(exc)}) from exc
+
+
+@app.post("/rss/unsubscribe", response_model=RssUnsubscribeResponse)
+async def api_rss_unsubscribe(req: RssUnsubscribeRequest) -> RssUnsubscribeResponse:
+    return await rss_unsubscribe(req.feed_url)
 
 
 @app.get("/rss/feeds", response_model=RssListResponse)

@@ -1,12 +1,14 @@
 # Research MCP Service
 
-Research service with **34 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
+Research service with **35 MCP tools in source** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
 
 - [LIVE-STATUS.md](docs/LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
 - [INSTALL.md](docs/INSTALL.md): image-only Compose installation, verified image digests, startup and maintenance.
 - [HTTPS.md](docs/HTTPS.md): optional public TLS and separate endpoint paths.
 - [DESIGN.md](docs/DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](docs/ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
+
+**Release status:** `rss_unsubscribe` is implemented and tested in source; the currently deployed/pinned images still expose 34 tools. It becomes available after a new app image and coordinated frontend/control update. See [LIVE-STATUS.md](docs/LIVE-STATUS.md).
 
 ## Runtime
 
@@ -31,7 +33,7 @@ Usual workflow: **search → fetch selected sources → retrieve saved passages*
 - Documents: PDF, DOCX, PPTX, TXT, Markdown and HTML text conversion; saved originals and extracted text. Text extraction is not complete document/layout understanding.
 - Retrieval: bounded cached passages, continuation offsets, an optional heading index, and `web_document_find` by literal phrase or ATX Markdown heading. Original evidence remains unchanged.
 - Batch/research: compact source summaries and separate failures. Full text is retrieved separately, even if an older client requests full Markdown in a batch.
-- RSS: preview, subscribe/list, fetch, cached entries and read-state updates. Unsubscribe is not implemented.
+- RSS: preview, subscribe/unsubscribe/list, fetch, cached entries and read-state updates. Unsubscribe preserves cached entries/read states; retrieve them by feed URL or entry ID. Explicit subscribe/fetch registers the feed again, but an in-flight fetch cannot undo a later unsubscribe.
 - Browser: open/observe/navigate/click/type/press/scroll/wait/text/find/close/list, bounded text/element waits, explicit back/forward, and native image screenshots with observation-preserving failure warnings. Four ephemeral sessions per owner worker; failures/restarts can expire them.
 
 Live MCP uses one text representation, not duplicate text/structured JSON. Documents default to 12,000-character passages, at most 30,000 per retrieval. Backend JSON is limited to 2 MiB; passage lookup currently retrieves the whole cached document before slicing, so this ceiling still applies. Inline artifacts are limited to 256 KiB; screenshots to 1 MiB. Batches accept 15 URLs and a concurrency argument of 1–10; actual isolated fetch execution has two slots. These are limits, not throughput promises.

@@ -25,6 +25,7 @@ CASES = [
     ('web_artifact', {'doc_id': 'doc_123', 'kind': 'markdown'}, 'GET', '/documents/doc_123/artifacts/markdown', {'artifact': True}),
     ('rss_preview', {'feed_url': URL}, 'GET', '/rss/preview', {'params': {'feed_url': URL, 'max_entries': 20}}),
     ('rss_subscribe', {'feed_url': URL}, 'POST', '/rss/subscribe', {'payload': {'feed_url': URL}}),
+    ('rss_unsubscribe', {'feed_url': URL}, 'POST', '/rss/unsubscribe', {'payload': {'feed_url': URL}}),
     ('rss_list', {}, 'GET', '/rss/feeds', {}),
     ('rss_fetch', {'feed_url': URL}, 'POST', '/rss/fetch', {'payload': {'feed_url': URL, 'max_entries': 20, 'force_refresh': False}}),
     ('rss_entries', {}, 'GET', '/rss/entries', {'params': {'limit': 50, 'include_read': False}}),
@@ -45,6 +46,10 @@ class GatewayToolTests(unittest.TestCase):
             self.assertEqual({t['name'] for t in tools}, {'health', 'web_research', *(case[0] for case in CASES)})
             annotations = {t['name']: t['annotations'] for t in tools}
             self.assertFalse(annotations['rss_subscribe']['readOnlyHint'])
+            self.assertFalse(annotations['rss_unsubscribe']['readOnlyHint'])
+            self.assertTrue(annotations['rss_unsubscribe']['destructiveHint'])
+            self.assertTrue(annotations['rss_unsubscribe']['idempotentHint'])
+            self.assertFalse(annotations['rss_unsubscribe']['openWorldHint'])
             self.assertFalse(annotations['web_read']['readOnlyHint'])
             self.assertTrue(annotations['web_document']['readOnlyHint'])
             for name, args, method, path, kwargs in CASES:

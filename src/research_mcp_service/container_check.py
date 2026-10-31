@@ -17,7 +17,7 @@ async def check(live=False):
         async with streamable_http_client('http://127.0.0.1:8766/mcp', http_client=client) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                assert len((await session.list_tools()).tools) == 34
+                assert len((await session.list_tools()).tools) == 35
                 async def call(name, **args):
                     result = await session.call_tool(name, args)
                     if result.is_error:
@@ -27,7 +27,7 @@ async def check(live=False):
                 await call('web_capabilities')
                 await call('web_recent_documents', limit=1)
                 await call('rss_list')
-                print('Authenticated MCP/control/Redis calls passed; 34 tools.', flush=True)
+                print('Authenticated MCP/control/Redis calls passed; 35 tools.', flush=True)
                 if live:
                     await call('search', query='Python documentation', limit=1, diagnostics=True)
                     doc = await call('web_read', url='https://example.com/', strategy='light', force_refresh=True)

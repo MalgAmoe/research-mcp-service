@@ -101,6 +101,6 @@ class BrowserToolTests(unittest.TestCase):
         with TestClient(create_app(TOKEN, search_backend=AsyncMock(), gateway_backend=AsyncMock(),
                                   browser_backend=AsyncMock()), base_url='http://127.0.0.1:8766') as client:
             tools = client.post('/mcp', headers=HEADERS, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']
-            self.assertEqual(len(tools), 34)
-            self.assertEqual(len({t['name'] for t in tools}), 34)
+            self.assertEqual(len(tools), 35)
+            self.assertEqual(len({t['name'] for t in tools}), 35)
             self.assertIn('search', {t['name'] for t in tools})

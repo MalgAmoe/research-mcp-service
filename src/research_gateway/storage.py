@@ -53,8 +53,25 @@ class RedisStore:
     # ── RSS ──────────────────────────────────────────────────────────────────
 
     async def save_rss_feed(self, key: str, feed: RssFeed) -> None:
-        await self.redis.set(f"rss:feed:{key}", feed.model_dump_json())
-        await self.redis.sadd("rss:feeds", key)
+        pipe = self.redis.pipeline()
+        pipe.set(f"rss:feed:{key}", feed.model_dump_json())
+        pipe.sadd("rss:feeds", key)
+        await pipe.execute()
+
+    async def unsubscribe_rss_feed(self, key: str) -> bool:
+        # Subscription metadata only; entry records, indexes and read states survive.
+        pipe = self.redis.pipeline()
+        pipe.srem("rss:feeds", key)
+        pipe.delete(f"rss:feed:{key}")
+        removed = await pipe.execute()
+        return any(bool(value) for value in removed)
+
+    async def update_subscribed_rss_feed(self, key: str, feed: RssFeed) -> bool:
+        # A fetch finishing after unsubscribe must not silently subscribe again.
+        return bool(await self.redis.eval(
+            "if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 0 then return 0 end "
+            "redis.call('SET', KEYS[2], ARGV[2]); return 1",
+            2, "rss:feeds", f"rss:feed:{key}", key, feed.model_dump_json()))
 
     async def get_rss_feed(self, key: str) -> RssFeed | None:
         raw = await self.redis.get(f"rss:feed:{key}")
