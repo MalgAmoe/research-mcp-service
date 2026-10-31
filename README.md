@@ -1,6 +1,6 @@
 # Research MCP Service
 
-Research service with **35 MCP tools in source** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
+Research service with **35 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
 
 - [LIVE-STATUS.md](docs/LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
 - [INSTALL.md](docs/INSTALL.md): image-only Compose installation, verified image digests, startup and maintenance.
@@ -8,7 +8,7 @@ Research service with **35 MCP tools in source** for search, page reading, docum
 - [DESIGN.md](docs/DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](docs/ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
-**Release status:** `rss_unsubscribe` is implemented and tested in source; the currently deployed/pinned images still expose 34 tools. It becomes available after a new app image and coordinated frontend/control update. See [LIVE-STATUS.md](docs/LIVE-STATUS.md).
+**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. Existing local/VPS installations still expose 34 tools until a coordinated frontend/control update. Image digests: [INSTALL.md](docs/INSTALL.md); deployment state and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
 
 ## Runtime
 
@@ -49,7 +49,7 @@ uv sync --locked --no-dev
 
 Offline tests exercise the production text-only MCP format, search → batch research orchestration, extraction/presentation regressions, storage maintenance and runtime safety boundaries. Tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
 
-The published images passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM, followed by a clean VPS installation. See [LIVE-STATUS.md](docs/LIVE-STATUS.md) for exact verification and limits; these checks are not a production soak.
+The previous candidate passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM, followed by a clean VPS installation. The new RSS candidate passed packaged tests, offline browser checks and anonymous digest pulls; its live rollout is pending. See [LIVE-STATUS.md](docs/LIVE-STATUS.md) for exact verification and limits; these checks are not a production soak.
 
 Clients use their configured MCP URL and `Authorization: Bearer <token>` in protected client settings. Reconnect after schema changes. `health` checks MCP connectivity, not backend health. Never copy credentials between independent deployments.
 

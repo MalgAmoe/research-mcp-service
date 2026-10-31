@@ -2,13 +2,23 @@
 
 Setup and maintenance: [INSTALL.md](INSTALL.md). Architecture: [DESIGN.md](DESIGN.md). Tools: [README.md](../README.md).
 
-## Pending app update
+## Published update; rollout pending
 
-Source adds `rss_unsubscribe(feed_url)` (35 tools): idempotent subscription removal preserving cached entries/read states, with an atomic guard against in-flight fetch re-subscription. 142 offline tests and a separate real Redis fixture check pass. The running/pinned images below still expose 34 tools; no live deployment has been changed for this feature. Release requires a new app image and coordinated frontend/control restart, not a cache reset or browser-worker restart.
+Candidate `rss-unsubscribe-20261031-104428`, built from `dda1475`, is public in `malgamoe/mcps`; exact digests and update commands are in [INSTALL.md](INSTALL.md). It adds `rss_unsubscribe(feed_url)` (35 tools): idempotent subscription removal preserving cached entries/read states, with an atomic guard against in-flight fetch re-subscription.
+
+142 host tests and a separate real Redis fixture check pass. The worker image passed the suite with two Docker-CLI-only tests skipped; the app image passed 22 RSS/MCP tests. Offline Chromium/Camoufox launch/content checks, egress imports, anonymous registry manifest checks and anonymous digest pulls passed (local image layers were cached). These exact images have not yet undergone a full Compose rollout or reboot check.
+
+Both live deployments remain unchanged at 34 tools. Enabling unsubscribe requires a coordinated frontend/control update, not a cache reset or browser-worker restart.
 
 ## Running installations
 
-Both installations use **`compose.deploy.yml`**, the published `candidate-20261030-181946` images and private Redis/SeaweedFS 4.51 storage. Exact image digests are in INSTALL.md. They expose 34 tools with separate credentials, caches and browser workers; neither shares resources with the original personal gateway.
+Both installations use **`compose.deploy.yml`**, the published `candidate-20261030-181946` images and private Redis/SeaweedFS 4.51 storage. Current deployment digests are below; INSTALL.md lists the newer, not-yet-deployed candidate. They expose 34 tools with separate credentials, caches and browser workers; neither shares resources with the original personal gateway.
+
+| Current image | SHA-256 digest (`malgamoe/mcps`) |
+|---|---|
+| App | `b3a026c1be9a84347d170944707d1d9ccc43abe1ded06df640638726446a79df` |
+| Worker | `ede7f5f79e95215080d02c9fa1c89cf80747055633282edc8e746109a38b07f8` |
+| Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
 | Installation | Compose identity | MCP access | Management |
 |---|---|---|---|
@@ -39,7 +49,7 @@ VPS connection, certificate and service commands: private `.state/CONTABO.md`. T
 
 - The deployed release's deployment/maintenance tooling passed 136 offline tests, including published-endpoint failure handling and the requirement that both MCP and control be stopped before deletion.
 
-- Published images were pulled anonymously by exact digest into a disposable Ubuntu VM. Two independent deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation and frontend denial of another owner's storage network.
+- The previous `candidate-20261030-181946` images were pulled anonymously by exact digest into a disposable Ubuntu VM. Two independent deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation and frontend denial of another owner's storage network.
 - Both VM stacks recovered after reboot without provisioning: saved evidence remained available, old browser handles expired and fresh browser/API checks passed.
 - Generated HTTPS routes passed trusted **test-CA** TLS, bearer/Host/Origin rejection and unknown-path checks. RSS subscription and cached-entry isolation passed using the Django weblog feed; an initial Python feed fetch failed and was not diagnosed.
 - Disposable retention rejected running writers, honored pins, deleted selected Redis metadata and S3 objects, released its lock and preserved RSS. Alpha maintenance left beta's data and browser usable.
