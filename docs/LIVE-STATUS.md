@@ -9,7 +9,7 @@ Both use `compose.deploy.yml`, separate credentials/data, Redis and SeaweedFS 4.
 | Deployment | Compose identity | MCP access | Status |
 |---|---|---|---|
 | Local test | `local-v2` | `http://100.69.41.80:8766/mcp`, existing token | 40-tool Scrapling trial, branch `test/scrapling-acquisition` |
-| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | Unchanged 35-tool `rss-unsubscribe-20261031-104428` candidate |
+| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | 40-tool `scrapling-20261108-223033-e9c05b2` release |
 
 Local-only image repository: `research-mcp-local` (not published). References in `.env.runtime` are digest-pinned:
 
@@ -22,15 +22,15 @@ VPS images (`malgamoe/mcps`); egress is also retained locally:
 
 | Component | SHA-256 |
 |---|---|
-| App | `5cfd08a1b0834ca226f4d568600ea5653c79a389bff82eb1ebe9ee54ee4d8524` |
-| Worker | `ede7f5f79e95215080d02c9fa1c89cf80747055633282edc8e746109a38b07f8` |
+| App | `93ef02a95b29d0445172874835a4123b18bb547fa9fc66559f81ee08059cf3f1` |
+| Worker | `3596ddab6d399d98875fd4c02515d9a31545fa75eb8dd1e325f85a8b31c202dc` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
-## Available image candidate
+## Published release and VPS verification
 
-`scrapling-20261108-223033-e9c05b2` is published in `malgamoe/mcps` for Linux amd64, from commit `e9c05b2`. Fresh app/worker/egress builds passed packaged suites, browser/RPC/MCP canaries, isolation and cancellation checks, plus anonymous registry manifest checks and digest pulls (local layers cached). Exact digests, verification limits and opt-in update instructions: [INSTALL.md](INSTALL.md). Private publication receipts: `.state/scrapling-release/public-images.json` and `progress.log`.
+`scrapling-20261108-223033-e9c05b2` is published in `malgamoe/mcps` for Linux amd64, from commit `e9c05b2`. Fresh app/worker/egress builds passed packaged suites, browser/RPC/MCP canaries, isolation and cancellation checks, plus anonymous registry manifest checks and digest pulls (local layers cached). Exact digests, verification limits and update instructions: [INSTALL.md](INSTALL.md). Private publication receipts: `.state/scrapling-release/public-images.json` and `progress.log`.
 
-Neither running deployment was changed by publication. The local development image references above remain active; VPS still runs the 35-tool baseline.
+VPS promotion passed 56 real MCP calls: search, four reader modes, storage/readback, both browsers, extraction, actions, network inspection, screenshots and history. Public trusted TLS, anonymous 401 and authenticated 40-tool discovery passed; original saved-document IDs remained retrievable through HTTPS. Persistent Redis records and S3 object hashes were preserved before acquisition probes; credentials and non-image configuration were unchanged. Only app/control and worker were recreated. Redis/S3 were stopped briefly for consistent backups; their container IDs, egress and search were retained. Local remains unchanged. VPS backup/receipts and rollback references: private `.state/CONTABO.md`.
 
 ## Local verification
 
@@ -39,7 +39,7 @@ Neither running deployment was changed by publication. The local development ima
 - Real offline fixtures pass in both browsers: forms, refs, action chains, extraction, Shadow DOM, screenshots, history, routing, manager-owned shutdown and scrolling on each axis.
 - 56 authenticated MCP calls pass, including append typing and completed history receipts; the endpoint still exposes 40 tools.
 - Both profiles pass private-navigation/subresource/WebSocket denial, public WSS and cancellation without surviving browser processes.
-- Only app/control/worker were recreated. Credentials, Redis/S3/search/egress containers and data volumes were preserved. VPS was not changed or promoted.
+- Only app/control/worker were recreated. Credentials, Redis/S3/search/egress containers and data volumes were preserved. These receipts describe the local deployment; VPS promotion is verified separately above.
 
 ## Operations
 

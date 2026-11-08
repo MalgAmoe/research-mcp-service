@@ -2,9 +2,9 @@
 
 One owner per stack. Docker runs the MCP frontend, search, control, browser worker, egress proxy, Redis and S3 storage. There is **no host application virtualenv, application systemd unit or runtime Docker access**. Docker administrators remain trusted. Optional public TLS: [HTTPS.md](HTTPS.md).
 
-**Production baseline:** `rss-unsubscribe-20261031-104428` (Linux amd64), built from source revision `dda1475` and published publicly in `malgamoe/mcps`. Adds RSS unsubscribe (35 tools). Packaged tests, offline Chromium/Camoufox checks and anonymous digest pulls passed. App-only updates passed live checks locally and on the VPS, retaining the previous worker/egress images. A fresh all-new-image stack and actual-host reboot checks remain unverified. Earlier VM verification and the exact current deployment mix are recorded in [LIVE-STATUS.md](LIVE-STATUS.md).
+**Production release:** `scrapling-20261108-223033-e9c05b2` (Linux amd64, 40 tools), built from source commit `e9c05b2dab16ff68b25c213623a27288c5b80d9f` and published in `malgamoe/mcps`. The VPS uses its app/control and worker images with the retained compatible egress image. Current deployment mix and verification limits: [LIVE-STATUS.md](LIVE-STATUS.md).
 
-The default examples below install the **35-tool production baseline**. The published 40-tool Scrapling candidate is an explicit opt-in described below. Local build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md); running image references: [LIVE-STATUS.md](LIVE-STATUS.md). Do not replace VPS image references with local-only development images.
+The examples below select this release. Local development build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md). Do not replace VPS image references with local-only development images.
 
 Commands below run from the repository root, not the `docs/` directory.
 
@@ -20,7 +20,8 @@ On a fresh Ubuntu 24.04 host, install Docker/Compose, Python 3 and Git through y
 ```sh
 git clone https://github.com/MalgAmoe/research-mcp-service.git /srv/research-alice
 cd /srv/research-alice
-python3 scripts/setup_server.py init --instance alice --port 8766 --version rss-unsubscribe-20261031-104428
+git checkout e9c05b2dab16ff68b25c213623a27288c5b80d9f
+python3 scripts/setup_server.py init --instance alice --port 8766 --version scrapling-20261108-223033-e9c05b2
 ```
 
 Use an explicit published version, not `latest`. Default image repository: `malgamoe/mcps`; override with `--repository` if required. Tags are `research-mcp-app-VERSION`, `research-mcp-worker-VERSION` and `research-mcp-egress-VERSION`. The app image runs frontend/control/credential-initialization roles with different commands and permissions. Upstream Redis, SeaweedFS and SearXNG images are pinned by digest.
@@ -31,17 +32,7 @@ The default published address is `127.0.0.1`. For Tailnet clients use `--host YO
 
 ### Verified image digests
 
-The version above identifies these images. For immutable references, replace the three image values in `.env.runtime` after initialization with `malgamoe/mcps@sha256:DIGEST` from this table; these exact digests were pulled anonymously on the build host (existing layers were cached). The earlier VM tests used the previous candidate, not these images.
-
-| Setting | SHA-256 digest |
-|---|---|
-| `MCP_APP_IMAGE` | `5cfd08a1b0834ca226f4d568600ea5653c79a389bff82eb1ebe9ee54ee4d8524` |
-| `MCP_WORKER_IMAGE` | `3be1a32af7b44fceee3941da39c60c338076f77e94d4656c9f30ce1b70263a1e` |
-| `MCP_EGRESS_IMAGE` | `ce26ac079c92cd40e90fbf7f1623b8fe780817ebb44ea6e0b7746cd2f721b2de` |
-
-### Published Scrapling candidate (40 tools)
-
-Opt-in release **`scrapling-20261108-223033-e9c05b2`**, Linux amd64, built from commit `e9c05b2dab16ff68b25c213623a27288c5b80d9f`. Tags follow the same `research-mcp-{app,worker,egress}-VERSION` convention in `malgamoe/mcps`.
+After initialization, immutable image references use `malgamoe/mcps@sha256:DIGEST` from this table. Anonymous manifest checks and digest pulls passed on the build host (local layers cached). The VPS retains its compatible earlier egress pin, recorded in LIVE-STATUS.md; fresh installations use the matching published egress below.
 
 | Setting | SHA-256 digest |
 |---|---|
@@ -49,9 +40,9 @@ Opt-in release **`scrapling-20261108-223033-e9c05b2`**, Linux amd64, built from 
 | `MCP_WORKER_IMAGE` | `3596ddab6d399d98875fd4c02515d9a31545fa75eb8dd1e325f85a8b31c202dc` |
 | `MCP_EGRESS_IMAGE` | `22615abce4f34af367ac7c993422f15bac7935a969bdd8d5d61b76af5e127897` |
 
-Fresh Dockerfile builds passed packaged suites (158 tests per app/worker image, respectively three/two expected skips), six egress unit tests, both-browser fixtures, four reader modes, 24 history traversals, private-network/WebSocket checks and cancellation. A 23-call MCP browser canary used the fresh app and real worker; unused search/storage backends were stubbed. Anonymous manifest checks and digest pulls passed with local layers cached. A complete fresh Compose/storage/search installation, production soak and actual-host reboot have not been tested for this candidate.
+Fresh Dockerfile builds passed packaged suites (158 tests per app/worker image, respectively three/two expected skips), six egress unit tests, both-browser fixtures, four reader modes, 24 history traversals, private-network/WebSocket checks and cancellation. A 23-call MCP browser canary used the fresh app and real worker; unused search/storage backends were stubbed. Anonymous manifest checks and digest pulls passed with local layers cached. The VPS rolling update also passed 56 real MCP calls covering search, four reader modes, cached retrieval and both-browser features, plus public trusted TLS/authentication and original saved-document retrieval. Persistent Redis records and S3 object bytes were checked before acquisition probes. A complete fresh all-new-image installation, production soak and actual-host reboot remain unverified.
 
-For an existing installation, take a consistent backup and save its image references; check out the release source and update app **and** worker pins together. References use `malgamoe/mcps@sha256:DIGEST`. The existing egress pin can remain unchanged for this rolling update; the matching candidate egress image is available for new installations. Pull the selected images before the coordinated restart:
+For an existing installation, take a consistent backup and save its image references; check out the release source and update app **and** worker pins together. References use `malgamoe/mcps@sha256:DIGEST`. The existing egress pin can remain unchanged for this rolling update; the matching release egress image is available for new installations. Pull the selected images before the coordinated restart:
 
 ```sh
 docker compose --env-file .env.runtime -f compose.deploy.yml pull control mcp fetch-worker
@@ -60,7 +51,7 @@ python3 scripts/setup_server.py check
 python3 scripts/setup_server.py check --live
 ```
 
-Preserve secrets, cache, volumes and TLS configuration. Browser sessions expire; saved data remains. Rollback restores the prior pins and recreates the same three services. New installations may explicitly select this candidate with `--version scrapling-20261108-223033-e9c05b2`; never rerun initialization on an existing installation. Publishing these images has not changed either running deployment.
+Preserve secrets, cache, volumes and TLS configuration. Browser sessions expire; saved data remains. Rollback restores the prior pins and recreates the same three services. Never rerun initialization on an existing installation. VPS promotion is verified; the local development deployment remains unchanged.
 
 ## Start and check
 
@@ -101,21 +92,9 @@ Docker restart policies recover running services after a host reboot. A Tailnet-
 
 The frontend waits for authenticated Redis/S3/worker readiness and a clear maintenance lock before serving. Credentials remain in their named volume; the initializer need not rerun at boot. Intentionally stopped containers stay stopped until an administrator starts them. Browser handles expire when their worker restarts; saved evidence is persistent.
 
-For updates: coordinate downtime and back up configuration plus consistent stopped-storage volumes. Record source revision and image references. Stop the stack, review/pull the intended repository revision and set the three image references in `.env.runtime` to the matching versioned release (or digest-pinned references), then run `up` and checks. Source/configuration and images must match. No automatic rollback is promised; storage changes can require a compatible data backup. Never use `down -v` or Docker prune as routine maintenance.
+For updates: coordinate downtime and back up configuration plus consistent stopped-storage volumes. Record source revision and image references. Stop the stack, review/pull the intended repository revision and set the required image references in `.env.runtime` to the matching release (app and worker together for Scrapling; retain egress only when explicitly compatible), then run `up` and checks. Source/configuration and images must match. No automatic rollback is promised; storage changes can require a compatible data backup. Never use `down -v` or Docker prune as routine maintenance.
 
 `compose.deploy.yml` is the only supported deployment layout. Initialization refuses existing configuration; there are no old-layout compatibility files or automatic data migrations. Never mount another storage engine's data directory into SeaweedFS. Preserve credentials/data unless an explicit reset has been approved.
-
-### App-only RSS unsubscribe update
-
-This feature changes no storage schema or worker/egress protocol. An existing `candidate-20261030-181946` stack can keep its worker/egress image references: coordinate a brief API interruption, save the previous `MCP_APP_IMAGE` value, and change only that value in `.env.runtime` to the new app digest above. Preserve all tokens and other configuration. From the matching source checkout:
-
-```sh
-docker compose --env-file .env.runtime -f compose.deploy.yml pull control mcp
-docker compose --env-file .env.runtime -f compose.deploy.yml up -d --no-deps --pull never --wait --wait-timeout 300 control mcp
-python3 scripts/setup_server.py check
-```
-
-For a local user-owned checkout, run the container check directly (`docker compose --env-file .env.runtime -f compose.deploy.yml exec -T mcp python -m research_mcp_service.container_check`) and verify the published endpoint with the existing client. Confirm 35 tools and unsubscribe behavior, then refresh client tool discovery. Rollback for this schema-preserving update is restoring the previous app reference and recreating only these same two services. Cached data and browser workers are not reset. This app-only procedure passed on both live installations: authenticated 35-tool discovery, RSS unsubscribe/read-state preservation, search, saved-page retrieval and Chromium/Camoufox. VPS public HTTPS also passed. Existing credentials, sampled cached records and all other containers were preserved.
 
 ## Manual retention
 

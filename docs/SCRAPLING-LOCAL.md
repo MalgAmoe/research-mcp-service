@@ -1,6 +1,6 @@
 # Local Scrapling integration
 
-Source branch: `test/scrapling-acquisition`. Local MCP is the 40-tool test deployment; VPS remains on the published 35-tool RSS candidate. The fresh-image candidate `scrapling-20261108-223033-e9c05b2` is published; pins and update instructions are in [INSTALL.md](INSTALL.md). VPS promotion has not occurred. Current image digests: [LIVE-STATUS.md](LIVE-STATUS.md).
+Source branch: `test/scrapling-acquisition`. Both deployments expose 40 tools. Local uses development images; VPS uses the published `scrapling-20261108-223033-e9c05b2` app/worker release with retained compatible egress. Pins and update instructions: [INSTALL.md](INSTALL.md). Current deployment references and verification: [LIVE-STATUS.md](LIVE-STATUS.md).
 
 ## Runtime
 
