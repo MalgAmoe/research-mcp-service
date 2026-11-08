@@ -1,6 +1,6 @@
 # Local Scrapling integration
 
-Source branch: `test/scrapling-acquisition`. Local MCP is the 40-tool test deployment; VPS remains on the published 35-tool RSS candidate. No public image publication or VPS promotion has occurred. Current image digests: [LIVE-STATUS.md](LIVE-STATUS.md).
+Source branch: `test/scrapling-acquisition`. Local MCP is the 40-tool test deployment; VPS remains on the published 35-tool RSS candidate. The fresh-image candidate `scrapling-20261108-223033-e9c05b2` is published; pins and update instructions are in [INSTALL.md](INSTALL.md). VPS promotion has not occurred. Current image digests: [LIVE-STATUS.md](LIVE-STATUS.md).
 
 ## Runtime
 
@@ -57,7 +57,7 @@ docker compose --env-file .env.runtime -f compose.deploy.yml exec -T fetch-worke
   python - < scripts/check_browser_egress.py
 ```
 
-158 host tests pass; the worker suite passes with two Docker-CLI-only skips. The 56-call endpoint suite, offline fixtures, 24 history traversals, proxy/WebSocket checks and cancellation checks pass. No sustained soak, actual-host reboot or fresh clean-image build has been verified for this trial.
+158 host tests pass; the worker suite passes with two Docker-CLI-only skips. The 56-call endpoint suite, offline fixtures, 24 history traversals, proxy/WebSocket checks and cancellation checks pass. Fresh candidate image builds are verified separately as recorded in INSTALL.md. No full fresh Compose installation, sustained soak or actual-host reboot has been verified for this trial.
 
 ## Operations and rollback
 

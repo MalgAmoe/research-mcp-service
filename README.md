@@ -8,7 +8,7 @@ Research service for search, page reading, document conversion, cached evidence,
 - [DESIGN.md](docs/DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](docs/ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
-**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. The VPS remains on that 35-tool release with its retained worker/egress. Local runs the separate 40-tool Scrapling trial described above; it has not been published or promoted. Published image digests: [INSTALL.md](docs/INSTALL.md); current local/VPS references and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
+**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. The VPS remains on that 35-tool release with its retained worker/egress. The 40-tool candidate `scrapling-20261108-223033-e9c05b2` is now published with fresh app/worker/egress images; it has not been deployed to the VPS. Local remains on its existing test images. Published image digests: [INSTALL.md](docs/INSTALL.md); current local/VPS references and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
 
 ## Runtime
 

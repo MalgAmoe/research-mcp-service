@@ -2,9 +2,9 @@
 
 One owner per stack. Docker runs the MCP frontend, search, control, browser worker, egress proxy, Redis and S3 storage. There is **no host application virtualenv, application systemd unit or runtime Docker access**. Docker administrators remain trusted. Optional public TLS: [HTTPS.md](HTTPS.md).
 
-**Published candidate:** `rss-unsubscribe-20261031-104428` (Linux amd64), built from source revision `dda1475` and published publicly in `malgamoe/mcps`. Adds RSS unsubscribe (35 tools). Packaged tests, offline Chromium/Camoufox checks and anonymous digest pulls passed. App-only updates passed live checks locally and on the VPS, retaining the previous worker/egress images. A fresh all-new-image stack and actual-host reboot checks remain unverified. Earlier VM verification and the exact current deployment mix are recorded in [LIVE-STATUS.md](LIVE-STATUS.md).
+**Production baseline:** `rss-unsubscribe-20261031-104428` (Linux amd64), built from source revision `dda1475` and published publicly in `malgamoe/mcps`. Adds RSS unsubscribe (35 tools). Packaged tests, offline Chromium/Camoufox checks and anonymous digest pulls passed. App-only updates passed live checks locally and on the VPS, retaining the previous worker/egress images. A fresh all-new-image stack and actual-host reboot checks remain unverified. Earlier VM verification and the exact current deployment mix are recorded in [LIVE-STATUS.md](LIVE-STATUS.md).
 
-This guide installs the **published 35-tool candidate**, not the unpublished 40-tool local test branch. Local build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md); running image references: [LIVE-STATUS.md](LIVE-STATUS.md). Do not replace VPS image references with local-only images.
+The default examples below install the **35-tool production baseline**. The published 40-tool Scrapling candidate is an explicit opt-in described below. Local build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md); running image references: [LIVE-STATUS.md](LIVE-STATUS.md). Do not replace VPS image references with local-only development images.
 
 Commands below run from the repository root, not the `docs/` directory.
 
@@ -38,6 +38,29 @@ The version above identifies these images. For immutable references, replace the
 | `MCP_APP_IMAGE` | `5cfd08a1b0834ca226f4d568600ea5653c79a389bff82eb1ebe9ee54ee4d8524` |
 | `MCP_WORKER_IMAGE` | `3be1a32af7b44fceee3941da39c60c338076f77e94d4656c9f30ce1b70263a1e` |
 | `MCP_EGRESS_IMAGE` | `ce26ac079c92cd40e90fbf7f1623b8fe780817ebb44ea6e0b7746cd2f721b2de` |
+
+### Published Scrapling candidate (40 tools)
+
+Opt-in release **`scrapling-20261108-223033-e9c05b2`**, Linux amd64, built from commit `e9c05b2dab16ff68b25c213623a27288c5b80d9f`. Tags follow the same `research-mcp-{app,worker,egress}-VERSION` convention in `malgamoe/mcps`.
+
+| Setting | SHA-256 digest |
+|---|---|
+| `MCP_APP_IMAGE` | `93ef02a95b29d0445172874835a4123b18bb547fa9fc66559f81ee08059cf3f1` |
+| `MCP_WORKER_IMAGE` | `3596ddab6d399d98875fd4c02515d9a31545fa75eb8dd1e325f85a8b31c202dc` |
+| `MCP_EGRESS_IMAGE` | `22615abce4f34af367ac7c993422f15bac7935a969bdd8d5d61b76af5e127897` |
+
+Fresh Dockerfile builds passed packaged suites (158 tests per app/worker image, respectively three/two expected skips), six egress unit tests, both-browser fixtures, four reader modes, 24 history traversals, private-network/WebSocket checks and cancellation. A 23-call MCP browser canary used the fresh app and real worker; unused search/storage backends were stubbed. Anonymous manifest checks and digest pulls passed with local layers cached. A complete fresh Compose/storage/search installation, production soak and actual-host reboot have not been tested for this candidate.
+
+For an existing installation, take a consistent backup and save its image references; check out the release source and update app **and** worker pins together. References use `malgamoe/mcps@sha256:DIGEST`. The existing egress pin can remain unchanged for this rolling update; the matching candidate egress image is available for new installations. Pull the selected images before the coordinated restart:
+
+```sh
+docker compose --env-file .env.runtime -f compose.deploy.yml pull control mcp fetch-worker
+docker compose --env-file .env.runtime -f compose.deploy.yml up -d --no-deps --pull never --wait --wait-timeout 300 fetch-worker control mcp
+python3 scripts/setup_server.py check
+python3 scripts/setup_server.py check --live
+```
+
+Preserve secrets, cache, volumes and TLS configuration. Browser sessions expire; saved data remains. Rollback restores the prior pins and recreates the same three services. New installations may explicitly select this candidate with `--version scrapling-20261108-223033-e9c05b2`; never rerun initialization on an existing installation. Publishing these images has not changed either running deployment.
 
 ## Start and check
 

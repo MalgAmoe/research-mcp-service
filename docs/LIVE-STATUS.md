@@ -26,6 +26,12 @@ VPS images (`malgamoe/mcps`); egress is also retained locally:
 | Worker | `ede7f5f79e95215080d02c9fa1c89cf80747055633282edc8e746109a38b07f8` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
+## Available image candidate
+
+`scrapling-20261108-223033-e9c05b2` is published in `malgamoe/mcps` for Linux amd64, from commit `e9c05b2`. Fresh app/worker/egress builds passed packaged suites, browser/RPC/MCP canaries, isolation and cancellation checks, plus anonymous registry manifest checks and digest pulls (local layers cached). Exact digests, verification limits and opt-in update instructions: [INSTALL.md](INSTALL.md). Private publication receipts: `.state/scrapling-release/public-images.json` and `progress.log`.
+
+Neither running deployment was changed by publication. The local development image references above remain active; VPS still runs the 35-tool baseline.
+
 ## Local verification
 
 - Scrapling 0.5.1 / Patchright 1.64.4; Playwright pinned to 1.62.0 for Camoufox interception compatibility. Chromium BFCache is disabled for reliable history readiness.
@@ -60,7 +66,7 @@ Preserve private `.env*`, `.secrets/`, `.state/` and data volumes. Do not initia
 
 ## Limits
 
-- Local images reuse verified dependency/browser/OS layers. A fresh clean-image build, sustained soak and actual-host reboot are not verified for this trial. Local Tailscale bind availability at Docker startup also needs a host reboot check; prior VM checks do not establish current-host recovery.
+- Local images reuse verified dependency/browser/OS layers. Fresh candidate image builds are verified separately above; a complete fresh Compose installation, sustained soak and actual-host reboot are not verified for this trial. Local Tailscale bind availability at Docker startup also needs a host reboot check; prior VM checks do not establish current-host recovery.
 - Frontend `arp_ignore=0` is scoped to its container network namespace; the host remains unchanged.
 - Retention is manual and guarded; apply requires both MCP and control stopped. No automatic cleanup is enabled. Backups must preserve consistent configuration and storage.
 - Document IDs are cache handles, not archives. Refresh may replace evidence; export irreplaceable records. Retrieval still has a 2 MiB backend ceiling before passage slicing.
