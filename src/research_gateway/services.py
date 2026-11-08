@@ -311,7 +311,7 @@ async def read_url(req: ReadUrlRequest) -> Document:
                 )
             )
         )
-        if cached and cached.strategy_used == ReadStrategy.standard and cached.method != "playwright+markdownify":
+        if cached and cached.strategy_used == ReadStrategy.standard and cached.method != "scrapling+markdownify":
             cache_strategy_matches = False
         if cache_strategy_matches and cached and cached.strategy_used == ReadStrategy.browser:
             if cached.metadata.extra.get("browser_profile") != req.browser_profile.value:
@@ -524,7 +524,7 @@ async def _read_with_strategy(
         return title, markdown, method, ReadStrategy.light, attempts, html
 
     if req.strategy == ReadStrategy.standard:
-        markdown, title, method, attempt, raw_html = await _extract_with_playwright(
+        markdown, title, method, attempt, raw_html = await _extract_with_chromium(
             url, structured=True
         )
         attempts.append(attempt)
@@ -549,7 +549,7 @@ async def _extract_with_browser(
     profile: BrowserProfile,
 ) -> tuple[str, str | None, str, ExtractionAttempt, str]:
     if profile == BrowserProfile.standard:
-        return await _extract_with_playwright(url)
+        return await _extract_with_chromium(url)
     if profile == BrowserProfile.stealth:
         return await _extract_with_camoufox(url)
     raise GatewayError(
@@ -561,50 +561,28 @@ async def _extract_with_browser(
     )
 
 
-async def _extract_with_playwright(url: str, *, structured: bool = False) -> tuple[str, str | None, str, ExtractionAttempt, str]:
-    try:
-        from playwright.async_api import async_playwright  # type: ignore
-    except Exception as exc:
-        raise GatewayError(
-            "browser_dependency_missing",
-            "Playwright is not installed",
-            status_code=500,
-            url=url,
-            browser_profile="standard",
-            cause=str(exc),
-        ) from exc
+async def _extract_with_chromium(url: str, *, structured: bool = False) -> tuple[str, str | None, str, ExtractionAttempt, str]:
+    from research_mcp_service.scrapling_backend import render
 
     started = time.perf_counter()
-    browser = None
     try:
-        async with async_playwright() as p:
-            proxy_options = {"proxy": {"server": settings.fetch_proxy, "bypass": "<-loopback>"}} if settings.fetch_proxy else {}
-            browser = await p.chromium.launch(headless=True, **proxy_options)
-            page = await browser.new_page()
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            if response is not None and response.status >= 400:
-                raise GatewayError('browser_bad_status', 'URL returned an unsuccessful HTTP status',
-                                   status_code=502, http_status=response.status)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=5000)
-            except Exception:
-                pass
-            title = await page.title()
-            html = await page.content()
-            final_url = page.url
-            await browser.close()
+        rendered = await render(url, proxy=settings.fetch_proxy)
+        if rendered['status'] >= 400:
+            raise GatewayError('browser_bad_status', 'URL returned an unsuccessful HTTP status',
+                               status_code=502, http_status=rendered['status'])
+        title, html, final_url = rendered['title'], rendered['html'], rendered['url']
         if structured:
             markdown = _structured_markdown(html, final_url)
             extraction_method = "markdownify"
         else:
             markdown, extraction_method = _extract_markdown(html, url)
-        method = f"playwright+{extraction_method}"
+        method = f"scrapling+{extraction_method}"
         return (
             markdown,
             title or None,
             method,
             ExtractionAttempt(
-                tool="playwright",
+                tool="scrapling",
                 status="success",
                 word_count=_word_count(markdown),
                 duration_ms=int((time.perf_counter() - started) * 1000),
@@ -614,14 +592,9 @@ async def _extract_with_playwright(url: str, *, structured: bool = False) -> tup
     except GatewayError:
         raise
     except Exception as exc:
-        if browser is not None:
-            try:
-                await browser.close()
-            except Exception:
-                pass
         raise GatewayError(
             "browser_extraction_failed",
-            "Could not render URL with Playwright",
+            "Could not render URL with Scrapling",
             status_code=502,
             url=url,
             browser_profile="standard",

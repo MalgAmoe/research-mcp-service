@@ -32,15 +32,15 @@ class MarkdownTests(unittest.TestCase):
 
 
 class StandardRoutingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_standard_uses_structured_playwright_and_retains_original(self):
+    async def test_standard_uses_structured_chromium_and_retains_original(self):
         original = '<nav>Menu</nav><p>Article</p>'
-        attempt = ExtractionAttempt(tool='playwright', status='success')
-        with patch('research_gateway.services._extract_with_playwright', new=AsyncMock(
-            return_value=('Article', 'Title', 'playwright+markdownify', attempt, original)
+        attempt = ExtractionAttempt(tool='scrapling', status='success')
+        with patch('research_gateway.services._extract_with_chromium', new=AsyncMock(
+            return_value=('Article', 'Title', 'scrapling+markdownify', attempt, original)
         )) as render:
             req = ReadUrlRequest(url='https://example.org/', strategy=ReadStrategy.standard)
             result = await _read_with_strategy(req)
             render.assert_awaited_once_with(str(req.url), structured=True)
-        self.assertEqual(result[2], 'playwright+markdownify')
+        self.assertEqual(result[2], 'scrapling+markdownify')
         self.assertEqual(result[3], ReadStrategy.standard)
         self.assertEqual(result[5], original)

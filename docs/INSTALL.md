@@ -4,6 +4,8 @@ One owner per stack. Docker runs the MCP frontend, search, control, browser work
 
 **Published candidate:** `rss-unsubscribe-20261031-104428` (Linux amd64), built from source revision `dda1475` and published publicly in `malgamoe/mcps`. Adds RSS unsubscribe (35 tools). Packaged tests, offline Chromium/Camoufox checks and anonymous digest pulls passed. App-only updates passed live checks locally and on the VPS, retaining the previous worker/egress images. A fresh all-new-image stack and actual-host reboot checks remain unverified. Earlier VM verification and the exact current deployment mix are recorded in [LIVE-STATUS.md](LIVE-STATUS.md).
 
+This guide installs the **published 35-tool candidate**, not the unpublished 40-tool local test branch. Local build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md); running image references: [LIVE-STATUS.md](LIVE-STATUS.md). Do not replace VPS image references with local-only images.
+
 Commands below run from the repository root, not the `docs/` directory.
 
 ## Prerequisites

@@ -36,6 +36,11 @@ class BrowserToolTests(unittest.TestCase):
             ('browser_close', {'session_id': SESSION}, 'close'),
             ('browser_close_all', {}, 'close_all'),
             ('browser_sessions', {}, 'sessions'),
+            ('browser_extract', {'session_id': SESSION, 'selector': 'table'}, 'extract'),
+            ('browser_network_requests', {'session_id': SESSION}, 'network_requests'),
+            ('browser_network_response', {'session_id': SESSION, 'request_id': 1}, 'network_response'),
+            ('browser_actions', {'session_id': SESSION, 'actions': [{'kind': 'click', 'ref': 'e1'}]}, 'actions'),
+            ('browser_screenshot', {'session_id': SESSION, 'selector': 'table'}, 'screenshot'),
         ]
         with TestClient(create_app(TOKEN, browser_backend=backend), base_url='http://127.0.0.1:8766') as client:
             tools = client.post('/mcp', headers=HEADERS, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']
@@ -50,7 +55,10 @@ class BrowserToolTests(unittest.TestCase):
                     called_action, params = backend.call_args.args
                     self.assertEqual(called_action, action)
                     for key, value in args.items():
-                        self.assertEqual(params[key], value)
+                        if key == 'actions':
+                            self.assertEqual(params[key][0]['kind'], value[0]['kind'])
+                        else:
+                            self.assertEqual(params[key], value)
                     if name == 'browser_open':
                         self.assertTrue(params['headless'])
                         self.assertEqual(params['viewport'], {'width': 1365, 'height': 900})
@@ -80,7 +88,12 @@ class BrowserToolTests(unittest.TestCase):
                ('browser_click', {'session_id': SESSION, 'ref': 'e1"] * [x="'}),
                ('browser_wait', {'session_id': SESSION, 'ms': 60000}),
                ('browser_find', {'session_id': SESSION, 'query': ''}),
-               ('browser_text', {'session_id': SESSION, 'max_chars': 100001})]
+               ('browser_text', {'session_id': SESSION, 'max_chars': 100001}),
+               ('browser_extract', {'session_id': SESSION, 'max_chars': 30001}),
+               ('browser_network_response', {'session_id': SESSION, 'request_id': 0}),
+               ('browser_actions', {'session_id': SESSION, 'actions': [{'kind': 'evaluate', 'value': 'bad()'}]}),
+               ('browser_actions', {'session_id': SESSION, 'actions': [{'kind': 'fill', 'selector': '#x'}]}),
+               ('browser_screenshot', {'session_id': SESSION, 'ref': 'e1', 'selector': '#x'})]
         with TestClient(create_app(TOKEN, browser_backend=backend), base_url='http://127.0.0.1:8766') as client:
             for name, args in bad:
                 with self.subTest(tool=name, args=args):
@@ -101,6 +114,6 @@ class BrowserToolTests(unittest.TestCase):
         with TestClient(create_app(TOKEN, search_backend=AsyncMock(), gateway_backend=AsyncMock(),
                                   browser_backend=AsyncMock()), base_url='http://127.0.0.1:8766') as client:
             tools = client.post('/mcp', headers=HEADERS, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']
-            self.assertEqual(len(tools), 35)
-            self.assertEqual(len({t['name'] for t in tools}), 35)
+            self.assertEqual(len(tools), 40)
+            self.assertEqual(len({t['name'] for t in tools}), 40)
             self.assertIn('search', {t['name'] for t in tools})

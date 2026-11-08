@@ -1,75 +1,67 @@
 # Deployment status
 
-Setup and maintenance: [INSTALL.md](INSTALL.md). Architecture: [DESIGN.md](DESIGN.md). Tools: [README.md](../README.md).
+Setup/update/backup: [INSTALL.md](INSTALL.md). TLS: [HTTPS.md](HTTPS.md). Runtime boundaries: [DESIGN.md](DESIGN.md). Local tool behavior and checks: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md).
 
-## RSS unsubscribe update
+## Running deployments
 
-Candidate `rss-unsubscribe-20261031-104428`, built from `dda1475`, is public in `malgamoe/mcps`; exact digests and update commands are in [INSTALL.md](INSTALL.md). It adds `rss_unsubscribe(feed_url)` (35 tools): idempotent subscription removal preserving cached entries/read states, with an atomic guard against in-flight fetch re-subscription.
+Both use `compose.deploy.yml`, separate credentials/data, Redis and SeaweedFS 4.51. Only MCP publishes a port; browser execution remains in a credential-free, network-none worker behind restricted egress. Neither shares resources with the original personal gateway.
 
-142 host tests and a separate real Redis fixture check pass. The worker image passed the suite with two Docker-CLI-only tests skipped; the app image passed 22 RSS/MCP tests. Offline Chromium/Camoufox launch/content checks, egress imports, anonymous registry manifest checks and anonymous digest pulls passed (local image layers were cached). The new app image has passed live app-only rollouts; the newly published worker/egress images have not been deployed. A fresh all-new-image stack and actual-host reboot checks remain unverified.
+| Deployment | Compose identity | MCP access | Status |
+|---|---|---|---|
+| Local test | `local-v2` | `http://100.69.41.80:8766/mcp`, existing token | 40-tool Scrapling trial, branch `test/scrapling-acquisition` |
+| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | Unchanged 35-tool `rss-unsubscribe-20261031-104428` candidate |
 
-Both live deployments now expose 35 tools. Only frontend/control containers were recreated. Authenticated published-endpoint checks, unsubscribe/repeat/resubscribe behavior, cached RSS entry/read-state preservation, search, saved-page retrieval and Chromium/Camoufox passed. VPS public HTTPS authentication and external anonymous rejection/certificate validation passed. Existing credentials, sampled saved records, browser workers and all other containers were preserved. Disposable RSS probe records were removed after verification.
+Local-only image repository: `research-mcp-local` (not published). References in `.env.runtime` are digest-pinned:
 
-## Running installations
+| Component | SHA-256 |
+|---|---|
+| App/control | `28aaba22373dbab40a7c34de30883e40a1f8af7297d44d629da978f3a5ea7d42` |
+| Worker | `047c3f08e529bf23fdecfa069412e9b0aee14b80d9974d5668ca3caabf3099a8` |
 
-Both installations use **`compose.deploy.yml`**, the `rss-unsubscribe-20261031-104428` app image, retained `candidate-20261030-181946` worker/egress images, and private Redis/SeaweedFS 4.51 storage. Current deployment digests are below; INSTALL.md lists the complete newly published candidate and the verified app-only update procedure. They expose 35 tools with separate credentials, caches and browser workers; neither shares resources with the original personal gateway.
+VPS images (`malgamoe/mcps`); egress is also retained locally:
 
-| Current image | SHA-256 digest (`malgamoe/mcps`) |
+| Component | SHA-256 |
 |---|---|
 | App | `5cfd08a1b0834ca226f4d568600ea5653c79a389bff82eb1ebe9ee54ee4d8524` |
 | Worker | `ede7f5f79e95215080d02c9fa1c89cf80747055633282edc8e746109a38b07f8` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
-| Installation | Compose identity | MCP access | Management |
-|---|---|---|---|
-| Local | `local-v2` | Same `http://100.69.41.80:8766/mcp` and bearer token | User-owned checkout, direct Docker Compose |
-| VPS | `contabo-v2` | Same HTTPS endpoint and bearer token, backend loopback | Root-owned checkout, setup helper or direct Compose |
+## Local verification
 
-Both host frontends and their old MCP/search containers have been replaced. Separately approved clean resets discarded the old cache/storage; current caches contain newly acquired evidence and smoke-test data. No old deployment overlays or component initialization helpers remain in the repository.
+- Scrapling 0.5.1 / Patchright 1.64.4; Playwright pinned to 1.62.0 for Camoufox interception compatibility. Chromium BFCache is disabled for reliable history readiness.
+- 158 host tests pass. The worker suite passes with two Docker-CLI-only skips.
+- Real offline fixtures pass in both browsers: forms, refs, action chains, extraction, Shadow DOM, screenshots, history, routing, manager-owned shutdown and scrolling on each axis.
+- 56 authenticated MCP calls pass, including append typing and completed history receipts; the endpoint still exposes 40 tools.
+- Both profiles pass private-navigation/subresource/WebSocket denial, public WSS and cancellation without surviving browser processes.
+- Only app/control/worker were recreated. Credentials, Redis/S3/search/egress containers and data volumes were preserved. VPS was not changed or promoted.
 
 ## Operations
 
-For the current local checkout, using the user's existing Docker access:
+Run from this checkout using the existing local Docker access:
 
 ```sh
 docker compose --env-file .env.runtime -f compose.deploy.yml ps
+docker compose --env-file .env.runtime -f compose.deploy.yml logs --tail 100 mcp control fetch-worker
 docker compose --env-file .env.runtime -f compose.deploy.yml exec -T mcp python -m research_mcp_service.container_check
 python3 scripts/retention.py  # read-only inventory
-# Coordinate downtime and browser-session loss before restarting:
-docker compose --env-file .env.runtime -f compose.deploy.yml up -d --pull never --wait
+# After backing up configuration and setting matching image references:
+# Coordinate downtime and browser-session loss before recreating services.
+docker compose --env-file .env.runtime -f compose.deploy.yml up -d --no-deps --pull never --wait --wait-timeout 180 fetch-worker control mcp
 ```
 
-This is the same Compose deployment as the VPS, not a second runtime mode. The administrator setup helper requires a root-owned server checkout and maintains its host reservation inventory. Current local configuration was generated during the coordinated reset; its existing Docker project/resources also prevent conflicting initialization. Do not initialize over either installation.
+Preserve private `.env*`, `.secrets/`, `.state/` and data volumes. Do not initialize over an existing deployment or use `down -v`/Docker prune for maintenance. The administrator setup helper requires a root-owned server checkout; local management uses Compose directly. VPS recovery/TLS/SSH commands: private `.state/CONTABO.md`.
 
-MCP logs now come from Docker Compose, not a background host process or `.state/mcp.pid`. Browser handles expire on worker restart. Configuration and secrets remain private in `.env*` and `.secrets/`. Do not delete data volumes for routine maintenance.
+## Rollback and retained records
 
-VPS connection, certificate and service commands: private `.state/CONTABO.md`. The migration preserved SSH, firewall, TLS/renewal and Hermes; no model calls were made.
-
-## Verified behavior
-
-- Current source passes 142 offline tests, including published-endpoint failure handling and the requirement that both MCP and control be stopped before deletion.
-
-- The previous `candidate-20261030-181946` images were pulled anonymously by exact digest into a disposable Ubuntu VM. Two independent deployments passed 34-tool discovery, search calls, acquisition/artifact retrieval, Chromium/Camoufox, cross-token/document/browser isolation and frontend denial of another owner's storage network.
-- Both VM stacks recovered after reboot without provisioning: saved evidence remained available, old browser handles expired and fresh browser/API checks passed.
-- Generated HTTPS routes passed trusted **test-CA** TLS, bearer/Host/Origin rejection and unknown-path checks. RSS subscription and cached-entry isolation passed using the Django weblog feed; an initial Python feed fetch failed and was not diagnosed.
-- Disposable retention rejected running writers, honored pins, deleted selected Redis metadata and S3 objects, released its lock and preserved RSS. Alpha maintenance left beta's data and browser usable.
-- VPS clean installation passed live API/storage/Chromium/Camoufox checks, existing public trusted HTTPS/authentication, and retention dry run. Old containers/volumes were removed after ownership checks; its host application unit is disabled. Public certificate renewal/reload had been verified previously and its six-hour timer was preserved.
-- Local clean installation passed the same live tool/browser checks, authenticated access through its original Tailscale URL, and retention dry run. An initial external connection failure triggered rollback without deleting data. Subsequent recreation exposed intermittent published-port reachability with the host's inherited `arp_ignore=2`. The frontend now sets `arp_ignore=0` only in its own network namespace; the host remains at 2. Authenticated host access passed after recreation and again after 100 seconds idle. The setup helper's check now also probes the published endpoint instead of relying solely on internal health. Old MCP containers/volumes were removed only after successful cutover. Personal gateway containers were untouched.
+- Current local receipts/configuration: `.state/local-maintenance/`. Its `rollback.sh` restores the preceding 40-tool deployment with the history fix intact.
+- `.state/scrapling-local/rollback.sh` restores the pre-Scrapling published 35-tool stack. Both rollback paths preserve data/secrets and expire browser sessions; reconnect clients when schemas change.
+- History-fix receipts: `.state/scrapling-cleanup/`. Initial trial build/deployment receipts: `.state/scrapling-local/`.
+- Published release/VM/RSS/storage records remain indexed in private `.state/README.md`; published image installation and update instructions are in INSTALL.md.
 
 ## Limits
 
-- Reboot recovery was tested with loopback publishing in the VM. **Neither new live stack has yet been reboot-tested on its actual host.** Local Tailscale-address availability at Docker startup requires a separate host check. Previous VPS host/network boot fixes were verified with its former application layout, not the new one.
-- Test-CA HTTPS is not public ACME issuance/renewal verification. Neither this rollout nor the VM tests establish production-soak or power-loss reliability.
-- Destructive retention used only a deliberately aged disposable fixture, not production evidence. Automatic cleanup remains disabled; apply requires both MCP and control stopped plus the guarded maintenance handshake.
-- Cache IDs are not archives; refresh may replace content. Export irreplaceable evidence separately. Backend document retrieval still has a 2 MiB ceiling before passage slicing.
-- Provider availability, extraction completeness and unique pagination are not guaranteed; request diagnostics when investigating failures.
-
-## Private evidence
-
-- `.state/compose-release/`: build/publication, anonymous pull, two-owner/reboot and HTTPS/RSS/retention test records. Exact digests: `public-images.json`.
-- `.state/rss-unsubscribe-release/`: new-image build/publication and packaged/browser checks.
-- `.state/rss-unsubscribe-rollout/` on each checkout: app-only update logs, before/after container identities, sampled-record checksums and the previous private runtime configuration for rollback. Both final exit codes are 0.
-- `.state/local-compose-reset/`: local reset outcome and initial/retry logs.
-- `.state/deploy-seaweed/`, `.state/evidence/`: selected earlier storage/security checks.
-- VPS migration logs: paths in `.state/CONTABO.md`.
-- `.state/README.md`: retained state layout. One-off VM harness files were removed; stopped-VM management metadata remains private and is not shipped.
+- Local images reuse verified dependency/browser/OS layers. A fresh clean-image build, sustained soak and actual-host reboot are not verified for this trial. Local Tailscale bind availability at Docker startup also needs a host reboot check; prior VM checks do not establish current-host recovery.
+- Frontend `arp_ignore=0` is scoped to its container network namespace; the host remains unchanged.
+- Retention is manual and guarded; apply requires both MCP and control stopped. No automatic cleanup is enabled. Backups must preserve consistent configuration and storage.
+- Document IDs are cache handles, not archives. Refresh may replace evidence; export irreplaceable records. Retrieval still has a 2 MiB backend ceiling before passage slicing.
+- Site/provider availability, extraction completeness, CAPTCHA access and unique pagination are not guaranteed.

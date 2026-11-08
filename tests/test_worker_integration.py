@@ -17,10 +17,10 @@ from research_mcp_service.worker_io import download
 class RoutingTests(unittest.IsolatedAsyncioTestCase):
     async def test_reader_uses_worker_without_host_rendering(self):
         backend = SimpleNamespace(run=AsyncMock(return_value={'title': 'Title', 'markdown': 'Text',
-            'method': 'playwright+markdownify', 'strategy_used': 'standard', 'attempts': [], 'raw_html': '<p>Text</p>'}))
+            'method': 'scrapling+markdownify', 'strategy_used': 'standard', 'attempts': [], 'raw_html': '<p>Text</p>'}))
         with patch.object(services, 'settings', SimpleNamespace(worker_socket='/rpc/worker.sock')), \
              patch('research_mcp_service.worker_client.get_worker', return_value=backend), \
-             patch.object(services, '_extract_with_playwright', new=AsyncMock()) as render:
+             patch.object(services, '_extract_with_chromium', new=AsyncMock()) as render:
             result = await services._read_with_strategy(ReadUrlRequest(url='https://example.org/'))
             self.assertEqual(result[1], 'Text')
             self.assertEqual(backend.run.call_args.args[0], 'read')
