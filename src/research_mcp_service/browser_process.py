@@ -8,7 +8,8 @@ import sys
 import uuid
 
 ACTIONS = {'open', 'observe', 'goto', 'click', 'type', 'press', 'scroll', 'wait', 'text', 'find',
-           'close', 'close_all', 'sessions', 'wait_for', 'history'}
+           'close', 'close_all', 'sessions', 'wait_for', 'history',
+           'extract', 'network_requests', 'network_response', 'actions', 'screenshot'}
 
 
 class BrowserProcess:

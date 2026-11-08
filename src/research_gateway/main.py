@@ -69,9 +69,9 @@ async def capabilities() -> dict[str, object]:
     return {
         "read_strategies": {
             "light": "fast static extraction: HTTP fetch + trafilatura/basic text fallback",
-            "standard": "Playwright Chromium + structured Markdown (code, tables, links)",
+            "standard": "Scrapling Chromium + structured Markdown (code, tables, links)",
             "browser": "browser-rendered extraction; profile standard or stealth",
-            "auto": "light first, then structured Playwright and browser fallback when extracted text is unusable",
+            "auto": "light first, then structured Scrapling Chromium and browser fallback when extracted text is unusable",
         },
         "search": {
             "primary": "searxng" if settings.search_provider == "auto" else settings.search_provider,
@@ -81,7 +81,7 @@ async def capabilities() -> dict[str, object]:
         "batch_fetch": {"max_urls": 15, "max_concurrency": 10, "default_concurrency": 5},
         "storage": ["redis", "s3"],
         "browser_profiles": {
-            "standard": "Playwright Chromium; use with strategy=browser",
+            "standard": "Scrapling Chromium; use with strategy=browser",
             "stealth": "Camoufox; set strategy=browser AND browser_profile=stealth",
         },
         "document_conversion": {

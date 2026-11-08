@@ -74,7 +74,7 @@ class ClarityTests(unittest.IsolatedAsyncioTestCase):
         spec.loader.exec_module(module)
         page = SimpleNamespace(evaluate=AsyncMock(return_value={'visibleText': 'evidence', 'nodes': []}),
             screenshot=AsyncMock(return_value=b'x'*(1024*1024+1)), title=AsyncMock(return_value='Title'), url='https://example.org')
-        module.sessions['s'] = module.BrowserSession('s', 'standard', None, page)
+        module.sessions['s'] = module.BrowserSession('s', 'standard', page, SimpleNamespace(__aexit__=AsyncMock()))
         result = await module.observe_session({'session_id': 's', 'include_screenshot': True})
         self.assertEqual(result['visible_text'], 'evidence')
         self.assertEqual(result['warnings'][0]['code'], 'screenshot_limit')

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""JSONL browser controller for the Pi browser extension.
+"""Owner-scoped JSONL browser controller inside the isolated execution worker.
 
-This is intentionally separate from the research gateway. It keeps short-lived
-interactive browser sessions in this subprocess and returns compact observations
-for agent control.
+Session managers own browser lifetime; this subprocess returns compact agent
+observations without storage credentials or direct network access.
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import os
 import signal
@@ -20,20 +18,19 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
+from research_mcp_service.browser_features import perform_action, screenshot
+
 
 @dataclass
 class BrowserSession:
     session_id: str
     profile: str
-    browser: Any
     page: Any
-    context: Any | None = None
-    playwright: Any | None = None
-    browser_manager: Any | None = None
+    browser_manager: Any
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
-    console: list[dict[str, Any]] = field(default_factory=list)
-    failed_requests: list[dict[str, Any]] = field(default_factory=list)
+    console_error_count: int = 0
+    failed_request_count: int = 0
     request_count: int = 0
     response_count: int = 0
     main_status: int | None = None
@@ -133,8 +130,8 @@ async def _setup_page_events(session: BrowserSession) -> None:
     page = session.page
 
     def on_console(msg: Any) -> None:
-        if len(session.console) < 100:
-            session.console.append({"type": msg.type, "text": msg.text[:1000]})
+        if msg.type == 'error':
+            session.console_error_count += 1
 
     def on_request(_request: Any) -> None:
         session.request_count += 1
@@ -147,15 +144,8 @@ async def _setup_page_events(session: BrowserSession) -> None:
         except Exception:
             pass
 
-    def on_request_failed(request: Any) -> None:
-        if len(session.failed_requests) < 50:
-            failure = request.failure or {}
-            session.failed_requests.append({
-                "url": request.url,
-                "method": request.method,
-                "resource_type": request.resource_type,
-                "error": failure.get("errorText") if isinstance(failure, dict) else str(failure),
-            })
+    def on_request_failed(_request: Any) -> None:
+        session.failed_request_count += 1
 
     page.on("console", on_console)
     page.on("request", on_request)
@@ -194,20 +184,12 @@ async def open_session(params: dict[str, Any]) -> dict[str, Any]:
     session_id = "br_" + uuid.uuid4().hex
 
     if profile == "standard":
-        from playwright.async_api import async_playwright  # type: ignore
+        from research_mcp_service.scrapling_backend import start_chromium
 
-        pw = await async_playwright().start()
-        proxy_options = {'proxy': {'server': FETCH_PROXY, 'bypass': '<-loopback>'}} if FETCH_PROXY else {}
-        browser = await pw.chromium.launch(headless=headless, **proxy_options)
-        context_kwargs: dict[str, Any] = {"viewport": viewport}
-        if locale:
-            context_kwargs["locale"] = locale
-        if timezone:
-            context_kwargs["timezone_id"] = timezone
-        context = await browser.new_context(**context_kwargs)
-        await _maybe_block_resources(context, block_resources)
-        page = await context.new_page()
-        session = BrowserSession(session_id=session_id, profile=profile, browser=browser, context=context, page=page, playwright=pw)
+        manager = await start_chromium(proxy=FETCH_PROXY, viewport=viewport,
+                                       locale=locale, timezone=timezone, record_requests=True)
+        session = BrowserSession(session_id=session_id, profile=profile,
+                                 page=None, browser_manager=manager)
     elif profile == "stealth":
         from camoufox.async_api import AsyncCamoufox  # type: ignore
 
@@ -228,7 +210,6 @@ async def open_session(params: dict[str, Any]) -> dict[str, Any]:
         session = BrowserSession(
             session_id=session_id,
             profile=profile,
-            browser=browser,
             page=page,
             browser_manager=manager,
         )
@@ -237,8 +218,17 @@ async def open_session(params: dict[str, Any]) -> dict[str, Any]:
 
     sessions[session_id] = session
     try:
-        await _setup_page_events(session)
-        response = await page.goto(url, wait_until=params.get("wait_until", "domcontentloaded"), timeout=params.get("timeout_ms", 30000))
+        if profile == 'standard':
+            async def setup(page):
+                session.page = page
+                await _maybe_block_resources(page.context, block_resources)
+                await _setup_page_events(session)
+            response = await manager.fetch(url, page_setup=setup, timeout=30000,
+                                           google_search=False, solve_cloudflare=False)
+            page = session.page
+        else:
+            await _setup_page_events(session)
+            response = await page.goto(url, wait_until=params.get("wait_until", "domcontentloaded"), timeout=params.get("timeout_ms", 30000))
         if response is not None:
             session.main_status = response.status
         wait_ms = int(params.get("wait_ms", 500))
@@ -255,17 +245,12 @@ async def observe_session(params: dict[str, Any]) -> dict[str, Any]:
     page = session.page
     observed = await page.evaluate(OBSERVE_JS)
     observed_url, observed_title = page.url, await page.title()
-    screenshot_b64 = None
-    warnings = []
+    image = {}
     if params.get("include_screenshot", False):
         try:
-            png = await page.screenshot(full_page=bool(params.get("full_page", False)), timeout=10000)
-            if len(png) > 1024 * 1024:
-                warnings.append({'code': 'screenshot_limit', 'message': 'Screenshot exceeds 1 MiB; use a viewport screenshot or smaller viewport.'})
-            else:
-                screenshot_b64 = base64.b64encode(png).decode("ascii")
+            image = await screenshot(page, full_page=bool(params.get("full_page", False)))
         except Exception:
-            warnings.append({'code': 'screenshot_failed', 'message': 'Screenshot capture failed; the preceding page observation is retained.'})
+            image = {'warnings': [{'code': 'screenshot_failed', 'message': 'Screenshot capture failed; the preceding page observation is retained.'}]}
     return {
         "session_id": session.session_id,
         "profile": session.profile,
@@ -273,14 +258,15 @@ async def observe_session(params: dict[str, Any]) -> dict[str, Any]:
         "title": observed_title,
         "visible_text": observed.get("visibleText", ""),
         "snapshot": observed.get("nodes", []),
-        "screenshot_base64": screenshot_b64,
-        "warnings": warnings,
+        "screenshot_base64": image.get('screenshot_base64'),
+        "warnings": image.get('warnings', []),
         "diagnostics": {
+            "engine": "scrapling" if session.profile == "standard" else "camoufox",
             "main_status": session.main_status,
             "request_count": session.request_count,
             "response_count": session.response_count,
-            "failed_request_count": len(session.failed_requests),
-            "console_error_count": sum(1 for m in session.console if m.get("type") == "error"),
+            "failed_request_count": session.failed_request_count,
+            "console_error_count": session.console_error_count,
         },
     }
 
@@ -308,48 +294,39 @@ async def goto_session(params: dict[str, Any]) -> dict[str, Any]:
     return await observe_session({"session_id": session.session_id, "include_screenshot": params.get("include_screenshot", False)})
 
 
+async def _action_session(params, kind, *, default_wait=500, **action):
+    session = _get_session(params['session_id'])
+    target = await _element_by_ref(session.page, params['ref']) if 'ref' in params else None
+    await perform_action(session.page, kind, target=target, **action)
+    await session.page.wait_for_timeout(int(params.get('wait_ms', default_wait)))
+    return await observe_session({'session_id': session.session_id, 'include_screenshot': params.get('include_screenshot', False)})
+
+
 async def click_session(params: dict[str, Any]) -> dict[str, Any]:
-    session = _get_session(params["session_id"])
-    locator = await _element_by_ref(session.page, params["ref"])
-    await locator.click(timeout=params.get("timeout_ms", 10000))
-    await session.page.wait_for_timeout(int(params.get("wait_ms", 500)))
-    return await observe_session({"session_id": session.session_id, "include_screenshot": params.get("include_screenshot", False)})
+    return await _action_session(params, 'click', timeout=params.get('timeout_ms', 10000))
 
 
 async def type_session(params: dict[str, Any]) -> dict[str, Any]:
-    session = _get_session(params["session_id"])
-    locator = await _element_by_ref(session.page, params["ref"])
-    if params.get("clear", True):
-        await locator.fill("")
-        await locator.fill(params["text"])
-    else:
-        await locator.type(params["text"])
-    await session.page.wait_for_timeout(int(params.get("wait_ms", 200)))
-    return await observe_session({"session_id": session.session_id, "include_screenshot": params.get("include_screenshot", False)})
+    clear = params.get('clear', True)
+    return await _action_session(params, 'fill' if clear else 'type', value=params['text'],
+                                 timeout=None, clear_first=clear, default_wait=200)
 
 
 async def press_session(params: dict[str, Any]) -> dict[str, Any]:
-    session = _get_session(params["session_id"])
-    await session.page.keyboard.press(params["key"])
-    await session.page.wait_for_timeout(int(params.get("wait_ms", 500)))
-    return await observe_session({"session_id": session.session_id, "include_screenshot": params.get("include_screenshot", False)})
+    return await _action_session(params, 'press', value=params['key'])
 
 
 async def scroll_session(params: dict[str, Any]) -> dict[str, Any]:
-    session = _get_session(params["session_id"])
-    amount = int(params.get("amount", 700))
-    direction = params.get("direction", "down")
-    dy = amount if direction == "down" else -amount
-    dx = amount if direction == "right" else -amount if direction == "left" else 0
-    if direction in {"up", "down"}:
-        dx = 0
-    await session.page.mouse.wheel(dx, dy)
-    await session.page.wait_for_timeout(int(params.get("wait_ms", 500)))
-    return await observe_session({"session_id": session.session_id, "include_screenshot": params.get("include_screenshot", False)})
+    amount = int(params.get('amount', 700))
+    direction = params.get('direction', 'down')
+    dy = amount if direction == 'down' else -amount if direction == 'up' else 0
+    dx = amount if direction == 'right' else -amount if direction == 'left' else 0
+    return await _action_session(params, 'scroll', x=dx, y=dy)
 
 
 async def history_session(params: dict[str, Any]) -> dict[str, Any]:
     from playwright.async_api import TimeoutError as BrowserTimeout
+    from patchright.async_api import TimeoutError as ScraplingTimeout
     session = _get_session(params['session_id'])
     page = session.page
     before = page.url
@@ -363,7 +340,7 @@ async def history_session(params: dict[str, Any]) -> dict[str, Any]:
             session.main_status = response.status
         else:
             outcome = 'same_document_or_no_entry'
-    except BrowserTimeout:
+    except (BrowserTimeout, ScraplingTimeout):
         outcome = 'timed_out'
     result = await observe_session(params)
     result['history'] = {'direction': params['direction'], 'outcome': outcome,
@@ -374,6 +351,7 @@ async def history_session(params: dict[str, Any]) -> dict[str, Any]:
 
 async def wait_for_session(params: dict[str, Any]) -> dict[str, Any]:
     from playwright.async_api import TimeoutError as BrowserTimeout
+    from patchright.async_api import TimeoutError as ScraplingTimeout
     session = _get_session(params['session_id'])
     text, selector = params.get('text'), params.get('selector')
     if (text is None) == (selector is None):
@@ -386,7 +364,7 @@ async def wait_for_session(params: dict[str, Any]) -> dict[str, Any]:
                 '(text) => (document.body?.innerText || "").includes(text)', arg=text, timeout=timeout)
         else:
             await session.page.locator('css=' + selector).first.wait_for(state='visible', timeout=timeout)
-    except BrowserTimeout:
+    except (BrowserTimeout, ScraplingTimeout):
         outcome = 'timed_out'
     result = await observe_session(params)
     result['wait_condition'] = {'kind': 'text' if text is not None else 'css_selector',
@@ -396,7 +374,7 @@ async def wait_for_session(params: dict[str, Any]) -> dict[str, Any]:
 
 async def wait_session(params: dict[str, Any]) -> dict[str, Any]:
     session = _get_session(params["session_id"])
-    await session.page.wait_for_timeout(int(params.get("ms", 1000)))
+    await perform_action(session.page, 'wait', ms=int(params.get("ms", 1000)))
     return await observe_session({"session_id": session.session_id, "include_screenshot": params.get("include_screenshot", False)})
 
 
@@ -449,19 +427,44 @@ async def find_session(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def extract_session(params):
+    from research_mcp_service.browser_features import extract
+    session = _get_session(params['session_id'])
+    return await extract(session.page, **{k: v for k, v in params.items() if k != 'session_id'})
+
+
+async def network_requests_session(params):
+    from research_mcp_service.browser_features import network_requests
+    session = _get_session(params['session_id'])
+    return network_requests(session, **{k: v for k, v in params.items() if k != 'session_id'})
+
+
+async def network_response_session(params):
+    from research_mcp_service.browser_features import network_response
+    session = _get_session(params['session_id'])
+    return network_response(session, **{k: v for k, v in params.items() if k != 'session_id'})
+
+
+async def actions_session(params):
+    from research_mcp_service.browser_features import actions
+    session = _get_session(params['session_id'])
+    receipt = await actions(session.page, params['actions'])
+    result = await observe_session({'session_id': session.session_id})
+    result['actions'] = receipt
+    return result
+
+
+async def screenshot_session(params):
+    session = _get_session(params['session_id'])
+    return await screenshot(session.page, **{k: v for k, v in params.items() if k != 'session_id'})
+
+
 async def close_session(params: dict[str, Any]) -> dict[str, Any]:
     session = sessions.pop(params["session_id"], None)
     if not session:
         return {"closed": False, "message": "session not found"}
     try:
-        if session.context is not None:
-            await session.context.close()
-        if session.browser_manager is not None:
-            await session.browser_manager.__aexit__(None, None, None)
-        else:
-            await session.browser.close()
-        if session.playwright is not None:
-            await session.playwright.stop()
+        await session.browser_manager.__aexit__(None, None, None)
     except Exception as exc:
         return {"closed": False, "error": str(exc)}
     return {"closed": True, "session_id": params["session_id"]}
@@ -520,6 +523,11 @@ ACTIONS = {
     "close": close_session,
     "close_all": close_all_sessions,
     "sessions": list_sessions,
+    "extract": extract_session,
+    "network_requests": network_requests_session,
+    "network_response": network_response_session,
+    "actions": actions_session,
+    "screenshot": screenshot_session,
 }
 
 

@@ -46,7 +46,7 @@ class NavigationTests(unittest.IsolatedAsyncioTestCase):
         spec.loader.exec_module(self.module)
         self.page = SimpleNamespace(url='https://example.org/', wait_for_function=AsyncMock(),
                                     go_back=AsyncMock(return_value=None))
-        self.module.sessions['s'] = self.module.BrowserSession('s', 'standard', None, self.page)
+        self.module.sessions['s'] = self.module.BrowserSession('s', 'standard', self.page, SimpleNamespace(__aexit__=AsyncMock()))
         self.module.observe_session = AsyncMock(return_value={'visible_text': 'observation'})
 
     async def test_conditional_timeout_retains_observation(self):

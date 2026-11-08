@@ -1,6 +1,6 @@
 # Research MCP Service
 
-Research service with **35 MCP tools** for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
+Research service for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. **This test branch exposes 40 MCP tools**; the published VPS candidate has 35. The [local Scrapling trial](docs/SCRAPLING-LOCAL.md) uses Scrapling as a library inside the existing worker for Chromium acquisition and adds targeted extraction, network-response inspection, action chains and element screenshots. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
 
 - [LIVE-STATUS.md](docs/LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
 - [INSTALL.md](docs/INSTALL.md): image-only Compose installation, verified image digests, startup and maintenance.
@@ -8,7 +8,7 @@ Research service with **35 MCP tools** for search, page reading, document conver
 - [DESIGN.md](docs/DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](docs/ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
-**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. Both local/VPS frontends and controls now expose 35 tools; their existing browser-worker and egress images were retained. Image digests: [INSTALL.md](docs/INSTALL.md); deployment state and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
+**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. The VPS remains on that 35-tool release with its retained worker/egress. Local runs the separate 40-tool Scrapling trial described above; it has not been published or promoted. Published image digests: [INSTALL.md](docs/INSTALL.md); current local/VPS references and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
 
 ## Runtime
 
@@ -29,7 +29,7 @@ Follow [INSTALL.md](docs/INSTALL.md) for a fresh administrator-owned deployment.
 Usual workflow: **search → fetch selected sources → retrieve saved passages**; use interactive browsing when needed. Successful calls do not certify extraction completeness or fidelity.
 
 - Search: explicit SearXNG/DDGS provider, automatic fallback, domains, page, freshness and language; optional diagnostics. Upstream pagination may overlap; language/freshness are not guarantees and missing publication dates are not inferred from snippets.
-- Reading: `light` HTTP/Trafilatura; `standard` Chromium/structured Markdown; `browser` Chromium or Camoufox; `auto` fallback. Stealth requires `strategy=browser` and `browser_profile=stealth`; it does not guarantee access past blocking.
+- Reading: `light` HTTP/Trafilatura; `standard` Scrapling Chromium/structured Markdown; `browser` Scrapling Chromium or Camoufox; `auto` fallback. Stealth requires `strategy=browser` and `browser_profile=stealth`; it does not guarantee access past blocking.
 - Documents: PDF, DOCX, PPTX, TXT, Markdown and HTML text conversion; saved originals and extracted text. Text extraction is not complete document/layout understanding.
 - Retrieval: bounded cached passages, continuation offsets, an optional heading index, and `web_document_find` by literal phrase or ATX Markdown heading. Original evidence remains unchanged.
 - Batch/research: compact source summaries and separate failures. Full text is retrieved separately, even if an older client requests full Markdown in a batch.
