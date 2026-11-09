@@ -9,7 +9,7 @@ Both use `compose.deploy.yml`, separate credentials/data, Redis and SeaweedFS 4.
 | Deployment | Compose identity | MCP access | Status |
 |---|---|---|---|
 | Local test | `local-v2` | `http://100.69.41.80:8766/mcp`, existing token | 40-tool Scrapling trial, branch `test/scrapling-acquisition` |
-| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | 40-tool `capacity-20261109` update |
+| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | 40-tool `docs-20261109-520d56b` update |
 
 Local-only image repository: `research-mcp-local` (not published). References in `.env.runtime` are digest-pinned:
 
@@ -22,19 +22,24 @@ VPS images (`malgamoe/mcps`); egress is also retained locally:
 
 | Component | SHA-256 |
 |---|---|
-| App | `2d71b5eaa3a608a9708d53f868032d07728c48d5d0dd0f082fcacfaffb1cabfb` |
-| Worker | `477ffa84c57ad1fed3678f5d69104f4d7351fad3ab60dbc7cfecb7bded0bad9c` |
+| App | `37ea21ea1f0756a750c4d49e395f530a0286db628d65a9b74adadf6c46eda301` |
+| Worker | `e33c79cc4d46a216286a079f246210c6d2a19987696ca8c5d840dbe5aaaf8448` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
 ## VPS capacity update
 
-`capacity-20261109` app/worker images are published and active on the VPS.
+`docs-20261109-520d56b` app/worker images are published and active on the VPS,
+from source commit `520d56b`. Action field descriptions/examples, one-based
+numbering, form HTML serialization, defaults/scroll units and network subset/cursor
+semantics are clarified in the exposed tool schema/descriptions; behavior is unchanged.
 Worker RAM is 3 GiB / 2 CPU cores; frontend/control/worker acquisition admission
 is 3. Interactive browser commands remain serialized. Control emits structured
-queue/duration/outcome logs; see INSTALL.md. Host suite: 162 passes; packaged
-app/worker: 162 each, two skips. Authenticated 40-tool checks and live search,
-read/storage/readback, Chromium and Camoufox checks pass. Three simultaneous
-uncached light reads via MCP completed ready in 11.41 seconds wall time with
+queue/duration/outcome logs; see INSTALL.md. Host suite: 163 passes; packaged
+app/worker: 163 each, two skips. Authenticated 40-tool checks and live search,
+read/storage/readback, Chromium and Camoufox checks pass. Updated exposed descriptions
+and action-field schema were verified through MCP discovery, including public trusted
+HTTPS (anonymous 401, authenticated 40 tools). Three simultaneous
+uncached light reads via MCP completed ready in 13.091 seconds wall time with
 0 ms control-admission queue wait each and no worker OOM/memory-limit events.
 This is a small functional concurrency check, not a sustained capacity benchmark.
 Egress, search,

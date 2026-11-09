@@ -4,7 +4,7 @@ One owner per stack. Docker runs the MCP frontend, search, control, browser work
 
 **Base release:** `scrapling-20261108-223033-e9c05b2` (Linux amd64, 40 tools), built from source commit `e9c05b2dab16ff68b25c213623a27288c5b80d9f` and published in `malgamoe/mcps`. The VPS uses its app/control and worker images with the retained compatible egress image. Current deployment mix and verification limits: [LIVE-STATUS.md](LIVE-STATUS.md).
 
-The VPS currently runs the published `capacity-20261109` app/worker update (3 GiB worker, acquisition concurrency 3); exact current pins and checks are in LIVE-STATUS.md. The examples below select the base release. Local development build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md). Do not replace VPS image references with local-only development images.
+The VPS currently runs the published `docs-20261109-520d56b` app/worker update (3 GiB worker, acquisition concurrency 3, clarified tool descriptions); exact current pins and checks are in LIVE-STATUS.md. The examples below select the base release. Local development build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md). Do not replace VPS image references with local-only development images.
 
 Commands below run from the repository root, not the `docs/` directory.
 
