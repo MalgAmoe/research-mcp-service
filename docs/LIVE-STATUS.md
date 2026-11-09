@@ -8,27 +8,59 @@ Both use `compose.deploy.yml`, separate credentials/data, Redis and SeaweedFS 4.
 
 | Deployment | Compose identity | MCP access | Status |
 |---|---|---|---|
-| Local test | `local-v2` | `http://100.69.41.80:8766/mcp`, existing token | 40-tool Scrapling trial, branch `test/scrapling-acquisition` |
-| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | 40-tool `docs-20261109-520d56b` update |
+| Local test | `local-v2` | `http://100.69.41.80:8766/mcp`; named tokens + existing token | 40 tools; named credentials/request logs |
+| VPS production | `contabo-v2` | Existing HTTPS endpoint; backend loopback; named tokens + existing token | 40 tools; named credentials/request logs |
 
-Local-only image repository: `research-mcp-local` (not published). References in `.env.runtime` are digest-pinned:
+Both frontends use published `malgamoe/mcps` app `auth-20261109-30c703e`, digest
+`97a27451073ff542a73772de604d3604f18958cef14c9273bbcee4cd7079b1f8`.
+Both `.env.runtime` app pins select this image for future app-role recreations.
+Only the frontends and one-shot credential initializers were recreated; running
+control/worker images remain as follows. Local retained images use the unpublished
+`research-mcp-local` repository:
 
 | Component | SHA-256 |
 |---|---|
-| App/control | `28aaba22373dbab40a7c34de30883e40a1f8af7297d44d629da978f3a5ea7d42` |
+| Running control | `28aaba22373dbab40a7c34de30883e40a1f8af7297d44d629da978f3a5ea7d42` |
 | Worker | `047c3f08e529bf23fdecfa069412e9b0aee14b80d9974d5668ca3caabf3099a8` |
 
 VPS images (`malgamoe/mcps`); egress is also retained locally:
 
 | Component | SHA-256 |
 |---|---|
-| App | `37ea21ea1f0756a750c4d49e395f530a0286db628d65a9b74adadf6c46eda301` |
+| Running control | `37ea21ea1f0756a750c4d49e395f530a0286db628d65a9b74adadf6c46eda301` |
 | Worker | `e33c79cc4d46a216286a079f246210c6d2a19987696ca8c5d840dbe5aaaf8448` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
-## VPS capacity update
+## Named credentials and request accounting
 
-`docs-20261109-520d56b` app/worker images are published and active on the VPS,
+Source `30c703e`, published app `auth-20261109-30c703e`, is active on both
+frontends. Host suite: 173 tests pass; packaged app: 173 tests run, two expected
+Docker-CLI-only skips. Authenticated discovery/control/Redis checks expose 40
+tools on both deployments. Named and legacy health calls pass, invalid tokens
+return 401; VPS verification uses trusted public HTTPS. Request logs identify
+client, UTC timestamp, method/tool, duration, HTTP status and MCP outcome without
+arguments, credentials or response contents. Registry management, `show` and
+`apply` commands: [INSTALL.md](INSTALL.md#named-credentials-and-request-logs).
+
+Local labels: `mrpi`, `hermes-local`; VPS label: `hermes-vps`. Pi's credential-file
+reference and both Hermes private environment files were updated. Both Hermes
+gateways and the local dashboard were restarted to load credentials; running Pi
+sessions need `/reload`. Existing tokens remain valid as `legacy`, including
+health checks. Clients on different deployments require that deployment's token;
+registries are independent and permissions/storage are shared within each stack.
+
+Only frontends restarted; browser workers, control, egress, search and storage
+were retained, preserving browser handles and saved data. Runtime/config backups,
+logs and verification: local `.state/named-tokens/`; VPS
+`/root/research-named-tokens-20261109/`. Rollback restores prior runtime and Compose
+files, recreates only the frontend and restores prior client credential configs;
+never restore storage or delete volumes for this frontend-only change.
+No model inference was invoked for verification. Actual-host reboot and fresh
+installation of this release have not been tested.
+
+## Retained VPS capacity and browser release
+
+`docs-20261109-520d56b` control/worker remain active on the VPS,
 from source commit `520d56b`. Action field descriptions/examples, one-based
 numbering, form HTML serialization, defaults/scroll units and network subset/cursor
 semantics are clarified in the exposed tool schema/descriptions; behavior is unchanged.
