@@ -2,9 +2,9 @@
 
 One owner per stack. Docker runs the MCP frontend, search, control, browser worker, egress proxy, Redis and S3 storage. There is **no host application virtualenv, application systemd unit or runtime Docker access**. Docker administrators remain trusted. Optional public TLS: [HTTPS.md](HTTPS.md).
 
-**Production release:** `scrapling-20261108-223033-e9c05b2` (Linux amd64, 40 tools), built from source commit `e9c05b2dab16ff68b25c213623a27288c5b80d9f` and published in `malgamoe/mcps`. The VPS uses its app/control and worker images with the retained compatible egress image. Current deployment mix and verification limits: [LIVE-STATUS.md](LIVE-STATUS.md).
+**Base release:** `scrapling-20261108-223033-e9c05b2` (Linux amd64, 40 tools), built from source commit `e9c05b2dab16ff68b25c213623a27288c5b80d9f` and published in `malgamoe/mcps`. The VPS uses its app/control and worker images with the retained compatible egress image. Current deployment mix and verification limits: [LIVE-STATUS.md](LIVE-STATUS.md).
 
-The examples below select this release. Local development build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md). Do not replace VPS image references with local-only development images.
+The VPS currently runs the published `capacity-20261109` app/worker update (3 GiB worker, acquisition concurrency 3); exact current pins and checks are in LIVE-STATUS.md. The examples below select the base release. Local development build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md). Do not replace VPS image references with local-only development images.
 
 Commands below run from the repository root, not the `docs/` directory.
 
@@ -95,6 +95,31 @@ The frontend waits for authenticated Redis/S3/worker readiness and a clear maint
 For updates: coordinate downtime and back up configuration plus consistent stopped-storage volumes. Record source revision and image references. Stop the stack, review/pull the intended repository revision and set the required image references in `.env.runtime` to the matching release (app and worker together for Scrapling; retain egress only when explicitly compatible), then run `up` and checks. Source/configuration and images must match. No automatic rollback is promised; storage changes can require a compatible data backup. Never use `down -v` or Docker prune as routine maintenance.
 
 `compose.deploy.yml` is the only supported deployment layout. Initialization refuses existing configuration; there are no old-layout compatibility files or automatic data migrations. Never mount another storage engine's data directory into SeaweedFS. Preserve credentials/data unless an explicit reset has been approved.
+
+## Acquisition capacity and timing
+
+Compose allocates 3 GiB RAM / 2 CPU cores to the browser worker and sets
+`ACQUISITION_CONCURRENCY=3` consistently in frontend, control and worker. The
+setting accepts 1–4 (direct Python use defaults to 2). Interactive browser
+commands remain serialized; this is not three simultaneous browser commands.
+No other service resource limits are increased. Deploy matching updated app
+and worker images before using this setting; older images ignore it.
+
+Control writes one JSON `worker_operation` record per admitted/queued operation
+to its rotated Docker log, including `operation`, `queue_ms`, `duration_ms`,
+`total_ms` and `outcome`. Queue time measures control-side admission only;
+duration includes worker execution and transfer. Records omit URLs, bodies,
+credentials and exception text. These are operation-level logs, not historical
+per-tool counters or frontend-rejection metrics. Inspect with:
+
+```sh
+docker compose --env-file .env.runtime -f compose.deploy.yml logs --since 30m control
+```
+
+Changes restart frontend/control/worker and invalidate browser handles. Wait
+for agent work to finish. Save previous image/config references, deploy, check
+health and exercise three overlapping reads while monitoring memory/errors.
+Roll back image/config references if failures or memory pressure increase.
 
 ## Manual retention
 

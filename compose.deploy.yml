@@ -58,6 +58,7 @@ services:
       MCP_TOKEN_FILE: /credentials/mcp-token
       MCP_GATEWAY_TOKEN_FILE: /credentials/gateway-token
       MCP_GATEWAY_SOCKET: /control-api/gateway.sock
+      ACQUISITION_CONCURRENCY: "${ACQUISITION_CONCURRENCY:-3}"
       SEARXNG_URL: http://searxng:8080
     ports:
       - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_PORT:-8766}:8766"
@@ -86,6 +87,7 @@ services:
     environment:
       GATEWAY_SOCKET: /control-api/gateway.sock
       WORKER_SOCKET: /rpc/worker.sock
+      ACQUISITION_CONCURRENCY: "${ACQUISITION_CONCURRENCY:-3}"
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: s3:8333
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set unique S3_ACCESS_KEY}
@@ -108,12 +110,13 @@ services:
     <<: *app
     image: ${MCP_WORKER_IMAGE:?Set the versioned worker image}
     network_mode: none
-    mem_limit: 2g
+    mem_limit: 3g
     cpus: 2
     pids_limit: 512
     tmpfs: ["/tmp:size=536870912,mode=1777"]
     environment:
       FETCH_PROXY: http://127.0.0.1:3128
+      ACQUISITION_CONCURRENCY: "${ACQUISITION_CONCURRENCY:-3}"
     volumes:
       - egress_socket:/egress:ro
       - worker_rpc:/rpc

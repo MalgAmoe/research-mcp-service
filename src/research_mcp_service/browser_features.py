@@ -10,13 +10,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class BrowserAction(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['click', 'hover', 'fill', 'press', 'check', 'uncheck', 'select', 'drag', 'scroll', 'wait']
-    ref: str | None = Field(default=None, pattern=r'^e[1-9][0-9]{0,6}$')
-    selector: str | None = Field(default=None, min_length=1, max_length=500)
-    value: str | None = Field(default=None, max_length=20000)
-    destination: str | None = Field(default=None, min_length=1, max_length=500)
-    x: int = Field(default=0, ge=-5000, le=5000)
-    y: int = Field(default=0, ge=-5000, le=5000)
-    ms: int = Field(default=0, ge=0, le=5000)
+    ref: str | None = Field(default=None, pattern=r'^e[1-9][0-9]{0,6}$', description='Current element ref; element actions require exactly one ref or selector.')
+    selector: str | None = Field(default=None, min_length=1, max_length=500, description='CSS source target, alternative to ref; not needed for scroll/wait.')
+    value: str | None = Field(default=None, max_length=20000, description='Required for fill (replacement text), press (target key, max 64 characters), select (visible option label).')
+    destination: str | None = Field(default=None, min_length=1, max_length=500, description='Required for drag: destination CSS selector, not an element ref.')
+    x: int = Field(default=0, ge=-5000, le=5000, description='Scroll horizontal wheel delta in CSS pixels; positive right, negative left, not a position.')
+    y: int = Field(default=0, ge=-5000, le=5000, description='Scroll vertical wheel delta in CSS pixels; positive down, negative up, not a position.')
+    ms: int = Field(default=0, ge=0, le=5000, description='Wait action duration in milliseconds; not a page-readiness condition.')
 
     @model_validator(mode='after')
     def validate_kind(self):

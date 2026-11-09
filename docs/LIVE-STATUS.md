@@ -9,7 +9,7 @@ Both use `compose.deploy.yml`, separate credentials/data, Redis and SeaweedFS 4.
 | Deployment | Compose identity | MCP access | Status |
 |---|---|---|---|
 | Local test | `local-v2` | `http://100.69.41.80:8766/mcp`, existing token | 40-tool Scrapling trial, branch `test/scrapling-acquisition` |
-| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | 40-tool `scrapling-20261108-223033-e9c05b2` release |
+| VPS production | `contabo-v2` | Existing HTTPS endpoint/token; backend loopback | 40-tool `capacity-20261109` update |
 
 Local-only image repository: `research-mcp-local` (not published). References in `.env.runtime` are digest-pinned:
 
@@ -22,9 +22,24 @@ VPS images (`malgamoe/mcps`); egress is also retained locally:
 
 | Component | SHA-256 |
 |---|---|
-| App | `93ef02a95b29d0445172874835a4123b18bb547fa9fc66559f81ee08059cf3f1` |
-| Worker | `3596ddab6d399d98875fd4c02515d9a31545fa75eb8dd1e325f85a8b31c202dc` |
+| App | `2d71b5eaa3a608a9708d53f868032d07728c48d5d0dd0f082fcacfaffb1cabfb` |
+| Worker | `477ffa84c57ad1fed3678f5d69104f4d7351fad3ab60dbc7cfecb7bded0bad9c` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
+
+## VPS capacity update
+
+`capacity-20261109` app/worker images are published and active on the VPS.
+Worker RAM is 3 GiB / 2 CPU cores; frontend/control/worker acquisition admission
+is 3. Interactive browser commands remain serialized. Control emits structured
+queue/duration/outcome logs; see INSTALL.md. Host suite: 162 passes; packaged
+app/worker: 162 each, two skips. Authenticated 40-tool checks and live search,
+read/storage/readback, Chromium and Camoufox checks pass. Three simultaneous
+uncached light reads via MCP completed ready in 11.41 seconds wall time with
+0 ms control-admission queue wait each and no worker OOM/memory-limit events.
+This is a small functional concurrency check, not a sustained capacity benchmark.
+Egress, search,
+Redis/S3, credentials, TLS and local running deployment were not changed.
+Rollback references/receipts: private `.state/CONTABO.md`.
 
 ## Published release and VPS verification
 

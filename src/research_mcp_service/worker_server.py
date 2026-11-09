@@ -14,6 +14,7 @@ import tempfile
 from fastapi import FastAPI, HTTPException, Request
 import uvicorn
 
+from .capacity import acquisition_concurrency
 from .egress_bridge import Bridge
 from .build_info import SOURCE_SNAPSHOT
 from .browser_process import BrowserProcess, ACTIONS
@@ -87,7 +88,7 @@ async def complete(request, operation, timeout):
 
 
 def create_worker_app(executor=run_job, timeout=75):
-    slots = asyncio.Semaphore(2)
+    slots = asyncio.Semaphore(acquisition_concurrency())
     browser = BrowserProcess()
 
     @asynccontextmanager
