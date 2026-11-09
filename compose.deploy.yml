@@ -38,6 +38,11 @@ services:
         target: /inputs/gateway-token
         read_only: true
         bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets
+        target: /client-inputs
+        read_only: true
+        bind: {create_host_path: false}
       - frontend_credentials:/credentials
 
   mcp:
@@ -56,6 +61,7 @@ services:
       MCP_LISTEN_HOST: 0.0.0.0
       MCP_LISTEN_PORT: "8766"
       MCP_TOKEN_FILE: /credentials/mcp-token
+      MCP_CLIENT_TOKENS_FILE: /credentials/client-tokens.json
       MCP_GATEWAY_TOKEN_FILE: /credentials/gateway-token
       MCP_GATEWAY_SOCKET: /control-api/gateway.sock
       ACQUISITION_CONCURRENCY: "${ACQUISITION_CONCURRENCY:-3}"

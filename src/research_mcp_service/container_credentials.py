@@ -3,7 +3,10 @@
 Only this initializer runs as container root. Application containers remain
 non-root and receive the credential volume read-only, never host directories.
 """
+import json
 import os
+
+from .request_auth import BearerAuth
 from pathlib import Path
 import tempfile
 
@@ -17,6 +20,17 @@ def main():
         if len(token) < 32 or not token.isascii() or any(c.isspace() for c in token):
             raise SystemExit('Invalid credential input')
         tokens[name] = token + '\n'
+    clients_path = Path('/client-inputs/client-tokens.json')
+    clients = {}
+    if clients_path.exists():
+        if clients_path.stat().st_mode & 0o077 or clients_path.is_symlink():
+            raise SystemExit('Client credential input must be a private regular file')
+        clients = json.loads(clients_path.read_text())
+        if not isinstance(clients, dict):
+            raise SystemExit('Client credentials must be a JSON object')
+    # Validate named and legacy tokens together before changing any destination.
+    BearerAuth(None, tokens['mcp-token'].strip(), clients)
+    tokens['client-tokens.json'] = json.dumps(clients) + '\n'
     for name, token in tokens.items():
         with tempfile.NamedTemporaryFile(mode='w', dir=target, delete=False) as f:
             f.write(token)

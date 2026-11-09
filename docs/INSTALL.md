@@ -77,7 +77,63 @@ docker compose --env-file .env.runtime -f compose.deploy.yml pull
 docker compose --env-file .env.runtime -f compose.deploy.yml up -d --pull never --wait --wait-timeout 300
 ```
 
-Keep `.env*` mode 0600 and `.secrets/` and `.state/` private. A network-none, one-shot initializer copies only the two frontend bearer tokens into a private named volume. The frontend mounts that volume read-only, runs as UID 10001 and receives no storage credentials. Control communicates over a separate named Unix-socket volume. The browser worker remains credential-free and network-none. No application container mounts the Docker socket.
+Keep `.env*` mode 0600 and `.secrets/` and `.state/` private. A network-none, one-shot initializer copies the two frontend bearer tokens and named-client registry into a private named volume. The frontend mounts that volume read-only, runs as UID 10001 and receives no storage credentials. Control communicates over a separate named Unix-socket volume. The browser worker remains credential-free and network-none. No application container mounts the Docker socket.
+
+### Named credentials and request logs
+
+The frontend accepts optional `MCP_CLIENT_TOKENS_FILE`, pointing to a private
+(mode 0600) JSON object mapping client labels to unique strong bearer tokens.
+Labels contain 1–64 ASCII letters, digits, underscores or hyphens. `legacy` is
+reserved: the existing `MCP_TOKEN_FILE` token remains valid under that label.
+All credentials have the same permissions; these are client identities, not
+separate accounts or storage namespaces. Remove a named entry and restart the
+frontend to revoke it. Never commit this file or print its contents in logs.
+Compose copies the optional `.secrets/client-tokens.json` through the isolated
+credential initializer into the private frontend credential volume. If absent,
+an empty registry is used; existing installations need no manual JSON setup.
+The application container never receives the host secrets directory. Keep health
+checks on the existing token. Client configuration must be updated privately per
+client. This requires the updated app image as well as the updated Compose file;
+deployment status and exact image pins are recorded in LIVE-STATUS.md.
+
+Manage clients from the deployment checkout (standard-library Python only):
+
+```sh
+python3 scripts/client_tokens.py add hermes-vps
+# stdout is the new secret, displayed once. Store it privately in the client.
+python3 scripts/client_tokens.py list       # labels only
+python3 scripts/client_tokens.py show hermes-vps  # retrieve ONE secret privately
+python3 scripts/client_tokens.py apply      # activate changes; recreates frontend only
+python3 scripts/client_tokens.py revoke hermes-vps
+python3 scripts/client_tokens.py apply      # enforce revocation
+```
+
+`add` refuses existing labels; `revoke` refuses unknown labels and cannot remove
+`legacy`. Writes are locked and atomic with mode 0600; corrupt or insecure files
+are rejected instead of overwritten. Avoid recording `add` output in shared
+terminal logs. Use `show LABEL` to retrieve an existing token privately, or revoke and replace it. Changes are **staged**
+until `apply` succeeds. `apply` first checks image compatibility, refreshes the
+credential volume and recreates only `mcp`, waiting for its health check. It does
+not restart the browser worker, control, storage or search. Active frontend
+requests may be interrupted. If application fails, inspect Compose status and
+retry; do not assume the previous registry is still active. Revocation affects
+new requests after restart, not work already completed. Root/Docker access is
+required for `apply` on the VPS.
+
+Frontend stdout emits one JSON `mcp_request` record per HTTP request on completion:
+UTC request-start timestamp, authenticated client label, HTTP/MCP method,
+tool name (when available), duration in milliseconds, HTTP status and outcome.
+Timing includes response transmission through the ASGI application, not client
+network latency. MCP tool errors are identified even with HTTP 200. No request
+arguments, credentials or response contents are emitted. Request/response
+inspection is bounded to 64 KiB; oversized responses retain HTTP-level outcomes
+but may not expose MCP-level errors. Unauthorized requests are labeled
+`unauthenticated`. Shared credentials cannot distinguish individual clients.
+
+```sh
+docker compose --env-file .env.runtime -f compose.deploy.yml logs -f --tail=100 mcp \
+  | grep --line-buffered '"event": "mcp_request"'
+```
 
 Client endpoint: `http://YOUR_BIND_ADDRESS:PORT/mcp`, with `Authorization: Bearer <token>` from `.secrets/mcp-token`. Transfer tokens privately, never in URLs, Git or shared prompts. Plain HTTP is appropriate only over loopback or the encrypted Tailnet. The container listens internally on all its interfaces, but accepted HTTP Host/Origin values remain tied to the configured published endpoint; they are not wildcarded.
 
