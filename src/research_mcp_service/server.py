@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
+import json
 import ipaddress
 import os
 from pathlib import Path
@@ -21,29 +21,14 @@ from .presentation import present_search
 from .build_info import SOURCE_SNAPSHOT
 
 
-class BearerAuth:
-    def __init__(self, app, token: str):
-        if len(token) < 32 or not token.isascii() or any(c.isspace() for c in token):
-            raise ValueError('MCP bearer token must contain at least 32 non-whitespace ASCII characters')
-        self.app = app
-        self.expected = token.encode('ascii')
-
-    async def __call__(self, scope, receive, send):
-        if scope['type'] == 'http':
-            values = [value for key, value in scope['headers'] if key.lower() == b'authorization']
-            scheme, _, value = values[0].partition(b' ') if len(values) == 1 else (b'', b'', b'')
-            if scheme.lower() != b'bearer' or not hmac.compare_digest(value, self.expected):
-                response = JSONResponse({'error': 'unauthorized'}, status_code=401,
-                    headers={'WWW-Authenticate': 'Bearer', 'Cache-Control': 'no-store'})
-                await response(scope, receive, send)
-                return
-        await self.app(scope, receive, send)
+from .request_auth import BearerAuth
 
 
 def create_app(token: str, host: str = '127.0.0.1', port: int = 8766,
                search_backend: Callable[..., Awaitable[dict]] | None = None,
                search_timeout: float = 60, gateway_backend=None, gateway_timeout: float = 90,
-               browser_backend=None, browser_timeout: float = 45):
+               browser_backend=None, browser_timeout: float = 45,
+               client_tokens: dict[str, str] | None = None):
     address = ipaddress.IPv4Address(host)
     if not address.is_loopback and address not in ipaddress.IPv4Network('100.64.0.0/10'):
         raise ValueError('Prototype must bind to a loopback or Tailscale IPv4 address')
@@ -141,7 +126,7 @@ def create_app(token: str, host: str = '127.0.0.1', port: int = 8766,
             allowed_origins=[f'http://{host}:{port}'],
         ),
     )
-    return BearerAuth(app, token)
+    return BearerAuth(app, token, client_tokens)
 
 
 def main():
@@ -153,6 +138,15 @@ def main():
     path = Path(token_file)
     if path.stat().st_mode & 0o077:
         raise SystemExit('Token file must be private (chmod 600)')
+    client_tokens = None
+    clients_file = os.environ.get('MCP_CLIENT_TOKENS_FILE')
+    if clients_file:
+        clients_path = Path(clients_file)
+        if clients_path.stat().st_mode & 0o077:
+            raise SystemExit('Client token file must be private (chmod 600)')
+        client_tokens = json.loads(clients_path.read_text())
+        if not isinstance(client_tokens, dict):
+            raise SystemExit('Client token file must be a JSON object mapping labels to tokens')
     backend = None
     if os.environ.get('MCP_ENABLE_SEARCH', '').lower() == 'true':
         endpoint = urlparse(os.environ.get('SEARXNG_URL', ''))
@@ -173,7 +167,8 @@ def main():
         async def browser(action, params):
             return await gateway('POST', '/browser', payload={'action': action, 'params': params})
     app = create_app(path.read_text().strip(), host, port, search_backend=backend,
-                     gateway_backend=gateway, browser_backend=browser, browser_timeout=60)
+                     gateway_backend=gateway, browser_backend=browser, browser_timeout=60,
+                     client_tokens=client_tokens)
     # Container listening is separate from the externally accepted Host/Origin.
     listen_host = os.environ.get('MCP_LISTEN_HOST', host)
     listen_port = int(os.environ.get('MCP_LISTEN_PORT', str(port)))

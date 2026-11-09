@@ -1,6 +1,6 @@
 # Research MCP Service
 
-Research service for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. **This test branch exposes 40 MCP tools**; the published VPS candidate has 35. The [local Scrapling trial](docs/SCRAPLING-LOCAL.md) uses Scrapling as a library inside the existing worker for Chromium acquisition and adds targeted extraction, network-response inspection, action chains and element screenshots. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
+Research service for search, page reading, document conversion, cached evidence, RSS and interactive Chromium/Camoufox browsing. **Both local test and VPS deployments expose 40 MCP tools**. The [local Scrapling trial](docs/SCRAPLING-LOCAL.md) uses Scrapling as a library inside the existing worker for Chromium acquisition and adds targeted extraction, network-response inspection, action chains and element screenshots. Streamable HTTP with bearer authentication over loopback/Tailscale or HTTPS. **One owner per independent deployment**; clients sharing a token share its cache and browser pool. No OAuth or shared-application multi-user tenancy.
 
 - [LIVE-STATUS.md](docs/LIVE-STATUS.md): current deployment, commands, verified behavior and known limitations.
 - [INSTALL.md](docs/INSTALL.md): image-only Compose installation, verified image digests, startup and maintenance.
@@ -8,7 +8,7 @@ Research service for search, page reading, document conversion, cached evidence,
 - [DESIGN.md](docs/DESIGN.md): runtime boundaries and remaining security work.
 - [ORIGIN.md](docs/ORIGIN.md): MIT source attribution. This checkout is independent of the original personal gateway; no shared code mounts, credentials or data.
 
-**Release status:** Published candidate `rss-unsubscribe-20261031-104428` includes `rss_unsubscribe`. The VPS remains on that 35-tool release with its retained worker/egress. Local runs the separate 40-tool Scrapling trial described above; it has not been published or promoted. Published image digests: [INSTALL.md](docs/INSTALL.md); current local/VPS references and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
+**Release status:** `scrapling-20261108-223033-e9c05b2` is published and deployed to the VPS (app/control and worker, retaining compatible egress). Local remains on its existing development images. Published image digests: [INSTALL.md](docs/INSTALL.md); current local/VPS references and verification limits: [LIVE-STATUS.md](docs/LIVE-STATUS.md).
 
 ## Runtime
 
@@ -49,7 +49,7 @@ uv sync --locked --no-dev
 
 Offline tests exercise the production text-only MCP format, search → batch research orchestration, extraction/presentation regressions, storage maintenance and runtime safety boundaries. Tests include protocol calls, subprocesses and local Unix sockets, but do not start the storage stack or real browsers. Explicit live checks are under `scripts/check_*.py`; some open/close browser sessions and fetch public sources. Run them only in a coordinated test window, not during someone else's investigation.
 
-The previous candidate passed two-owner deployment, browser, isolation and reboot checks in a disposable Ubuntu VM, followed by a clean VPS installation. The RSS candidate passed packaged tests, offline browser checks and anonymous digest pulls. App-only updates passed live RSS, search, saved-page retrieval and both-browser checks locally and on the VPS; browser workers were not restarted. See [LIVE-STATUS.md](docs/LIVE-STATUS.md) for exact verification and limits; these checks are not a production soak.
+The published release passed fresh-image packaged/browser/isolation/cancellation checks and anonymous registry verification. The VPS rolling update passed 56 live MCP calls, search, four reader modes, cached retrieval and Chromium/Camoufox features, plus public HTTPS authentication. Existing records/object bytes and credentials were checked for preservation before acquisition probes. A complete fresh all-new-image installation and actual-host reboot remain unverified. See [LIVE-STATUS.md](docs/LIVE-STATUS.md) for exact verification and limits; these checks are not a production soak.
 
 Clients use their configured MCP URL and `Authorization: Bearer <token>` in protected client settings. Reconnect after schema changes. `health` checks MCP connectivity, not backend health. Never copy credentials between independent deployments.
 

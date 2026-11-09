@@ -54,7 +54,8 @@ def public_view(value):
 
 
 def register_gateway_tools(server, backend, *, timeout=90, research_search=None):
-    call = GatewayCalls(backend, timeout=timeout)
+    from .capacity import acquisition_concurrency
+    call = GatewayCalls(backend, timeout=timeout, concurrency=acquisition_concurrency())
 
     async def request(method, path, **kwargs):
         compact = path in {'/batch_fetch', '/research', '/documents/recent'}
@@ -188,7 +189,7 @@ def register_gateway_tools(server, backend, *, timeout=90, research_search=None)
         """Find a literal phrase or Markdown heading in a cached document; no new fetch.
 
         Choose query OR heading. Matching is case-insensitive; heading matches a substring of
-        an ATX (#) heading, excluding fenced code. occurrence selects repeated matches.
+        an ATX (#) heading, excluding fenced code. occurrence selects repeated matches using one-based numbering (1=first, 2=second).
         Returns a bounded passage and absolute offsets usable with web_document. Phrase
         results include up to 300 preceding characters. A heading includes its subsections.
         """

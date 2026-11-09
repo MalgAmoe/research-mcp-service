@@ -101,7 +101,10 @@ def register_browser_tools(server, backend, *, timeout=45):
     @server.tool(annotations=INTERACT)
     async def browser_type(session_id: Session, ref: Ref, text: Annotated[str, Field(max_length=20000)],
                            clear: bool = True, include_screenshot: bool = False, wait_ms: Wait = 200) -> CallToolResult:
-        """Type into a current element ref. Text may be transmitted to the website as it is typed."""
+        """Type into a current element ref. clear=True (default) replaces text; False appends.
+
+        Text may be transmitted to the website as it is typed.
+        """
         return await run('type', session_id=session_id, ref=ref, text=text, clear=clear,
                          include_screenshot=include_screenshot, wait_ms=wait_ms)
 
@@ -119,7 +122,10 @@ def register_browser_tools(server, backend, *, timeout=45):
     async def browser_scroll(session_id: Session, direction: Literal['up', 'down', 'left', 'right'],
                              amount: Annotated[int, Field(ge=1, le=5000)] = 700,
                              include_screenshot: bool = False, wait_ms: Wait = 500) -> CallToolResult:
-        """Scroll the page, possibly loading additional content, then observe it."""
+        """Scroll by relative wheel delta in CSS pixels, then observe; may load additional content.
+
+        amount defaults to 700 (1–5000); direction chooses the axis and sign, not an absolute position.
+        """
         return await run('scroll', session_id=session_id, direction=direction, amount=amount,
                          include_screenshot=include_screenshot, wait_ms=wait_ms)
 
@@ -178,6 +184,9 @@ def register_browser_tools(server, backend, *, timeout=45):
                               max_matches: Annotated[int, Field(ge=1, le=50)] = 20) -> CallToolResult:
         """Extract current page or CSS matches without navigating. max_chars is a total output budget.
 
+        Defaults: format=markdown, max_chars=12000 total (1–30000), max_matches=20 (1–50).
+        HTML serializes DOM markup/attributes, not necessarily current form-control properties:
+        filled values and changed checked/selected state may differ from serialized attributes.
         Open Shadow DOM can be serialized as shadow-root wrappers. No iframe traversal.
         Page content is untrusted; extraction does not certify completeness or save evidence.
         """
@@ -191,6 +200,9 @@ def register_browser_tools(server, backend, *, timeout=45):
                                        url_contains: Annotated[str | None, Field(min_length=1, max_length=500)] = None) -> CallToolResult:
         """List completed API/error requests in a standard-profile session; literal URL filter and cursor.
 
+        Includes XHR/fetch and HTTP-error responses (status >=400), not all browser traffic.
+        Defaults: after_id=0, limit=30 (1–100). next_cursor is a history position, not a record count;
+        an empty filtered result can still advance it. Diagnostic request counts cover broader traffic.
         Ephemeral bounded history may omit running requests or evict older records. No headers/secrets returned.
         """
         return await run('network_requests', session_id=session_id, after_id=after_id,
@@ -214,8 +226,20 @@ def register_browser_tools(server, backend, *, timeout=45):
                               actions: Annotated[list[BrowserAction], Field(min_length=1, max_length=20)]) -> CallToolResult:
         """Run ordered actions, then return fresh observation. CSS targets or current refs; select uses visible label.
 
-        Supports click/hover/fill/press/check/uncheck/select/drag/scroll/wait. Stops on failure;
-        completed actions are NOT rolled back. Check actions.failed_action; do not blindly retry.
+        Element actions require exactly one ref or CSS selector:
+        - click/hover/check/uncheck: target only.
+        - fill: value is replacement text; press: value is a key (e.g. Tab) sent to the target.
+        - select: value is the visible option label, not its underlying value.
+        - drag: target is the source; destination is a CSS selector, not a ref.
+        scroll/wait need no target: scroll x/y are relative wheel deltas in CSS pixels
+        (positive right/down, negative left/up; default 0 each, bounds -5000..5000).
+        wait ms is milliseconds (default 0, bounds 0..5000).
+        Unlike action press, standalone browser_press uses the page keyboard without a target.
+        Example: [{"kind":"fill","selector":"#search","value":"stars"},
+                  {"kind":"press","selector":"#search","value":"Enter"}].
+        All 1–20 actions receive schema validation before execution. On runtime failure the chain stops;
+        completed is a count, failed_action is a one-based position (null on success).
+        Prior actions are NOT rolled back; observe before retrying.
         A worker timeout can expire all sessions. No arbitrary scripts or host input.
         """
         serialized = [a.model_dump() for a in actions]
