@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import sys
+import tempfile
 import uuid
 
 ACTIONS = {'open', 'observe', 'goto', 'click', 'type', 'press', 'scroll', 'wait', 'text', 'find',
@@ -15,6 +16,7 @@ ACTIONS = {'open', 'observe', 'goto', 'click', 'type', 'press', 'scroll', 'wait'
 class BrowserProcess:
     def __init__(self):
         self.process = None
+        self.scratch = None
         self.lock = asyncio.Lock()
 
     async def stop(self):
@@ -25,6 +27,9 @@ class BrowserProcess:
             except ProcessLookupError:
                 pass
             await process.wait()
+        if self.scratch is not None:
+            self.scratch.cleanup()
+            self.scratch = None
 
     async def call(self, action, params):
         if action not in ACTIONS:
@@ -37,10 +42,12 @@ class BrowserProcess:
                     if self.process is None or self.process.returncode is not None:
                         await self.stop()
                         controller = Path(__file__).resolve().parents[2] / 'scripts/browser_controller.py'
+                        self.scratch = tempfile.TemporaryDirectory(prefix='research-browser-')
                         self.process = await asyncio.create_subprocess_exec(
                             sys.executable, str(controller), stdin=asyncio.subprocess.PIPE,
                             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-                            limit=2 * 1024 * 1024, start_new_session=True)
+                            limit=2 * 1024 * 1024, start_new_session=True,
+                            env={**os.environ, 'TMPDIR': self.scratch.name})
                     identity = uuid.uuid4().hex
                     self.process.stdin.write((json.dumps({'id': identity, 'action': action, 'params': params}) + '\n').encode())
                     await self.process.stdin.drain()
@@ -58,7 +65,12 @@ class BrowserProcess:
                         if response.get('ok'):
                             if not isinstance(response.get('result'), dict):
                                 raise RuntimeError('Invalid controller result')
-                            return response['result']
+                            result = response['result']
+                            if ((action == 'close' and result.get('error')) or
+                                    (action == 'close_all' and result.get('closed') != result.get('requested'))):
+                                await self.stop()
+                                return {'error': {'code': 'browser_reset'}}
+                            return result
                         error = response.get('error', '')
                         if error.startswith('KeyError:'):
                             return {'error': {'code': 'session_not_found'}}

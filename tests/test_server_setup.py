@@ -159,7 +159,7 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(services['fetch-worker']['network_mode'], 'none')
         self.assertEqual(set(services['fetch-worker']['environment']), {'FETCH_PROXY', 'ACQUISITION_CONCURRENCY'})
         self.assertEqual(services['fetch-worker']['environment']['ACQUISITION_CONCURRENCY'], services['control']['environment']['ACQUISITION_CONCURRENCY'])
-        self.assertEqual(services['fetch-worker']['mem_limit'], '3g')
+        self.assertEqual(services['fetch-worker']['mem_limit'], '${WORKER_MEMORY_LIMIT:-3g}')
         self.assertEqual([name for name, config in services.items() if 'ports' in config], ['mcp'])
         self.assertNotIn('docker.sock', json.dumps(services))
         self.assertTrue(all('build' not in config for config in services.values()))

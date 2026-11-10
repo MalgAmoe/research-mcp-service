@@ -11,7 +11,9 @@ import asyncio
 import json
 import os
 import signal
+import shutil
 import sys
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -19,6 +21,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from research_mcp_service.browser_features import perform_action, screenshot
+from research_mcp_service.temporary import temporary_environment
 
 
 @dataclass
@@ -34,12 +37,14 @@ class BrowserSession:
     request_count: int = 0
     response_count: int = 0
     main_status: int | None = None
+    scratch: Any = None
 
 
 sessions: dict[str, BrowserSession] = {}
 MAX_SESSIONS = max(1, min(4, int(os.getenv("RESEARCH_BROWSER_MAX_SESSIONS", "4"))))
 IDLE_TIMEOUT_SECONDS = max(60, min(1800, int(os.getenv("RESEARCH_BROWSER_IDLE_TIMEOUT_SECONDS", "1800"))))
 FETCH_PROXY = os.getenv('FETCH_PROXY')
+cleanup_failed = False
 
 
 def _web_url(url: str) -> str:
@@ -167,7 +172,23 @@ async def _maybe_block_resources(context: Any, block_resources: bool) -> None:
 
 
 async def open_session(params: dict[str, Any]) -> dict[str, Any]:
+    scratch = tempfile.mkdtemp(prefix='session-')
+    try:
+        with temporary_environment(scratch):
+            result = await _open_session(params)
+        sessions[result['session_id']].scratch = scratch
+        return result
+    except BaseException:
+        # Partial startup may leave a live browser: the supervisor kills its
+        # process group and removes the enclosing controller scratch directory.
+        # Do not delete files from underneath a possibly live browser here.
+        raise
+
+
+async def _open_session(params: dict[str, Any]) -> dict[str, Any]:
     await expire_idle_sessions()
+    if cleanup_failed:
+        raise RuntimeError('Browser cleanup failed; controller reset required')
     if len(sessions) >= MAX_SESSIONS:
         raise ValueError('Browser session limit reached; close an existing session first')
 
@@ -460,12 +481,16 @@ async def screenshot_session(params):
 
 
 async def close_session(params: dict[str, Any]) -> dict[str, Any]:
+    global cleanup_failed
     session = sessions.pop(params["session_id"], None)
     if not session:
         return {"closed": False, "message": "session not found"}
     try:
         await session.browser_manager.__aexit__(None, None, None)
+        if session.scratch is not None:
+            shutil.rmtree(session.scratch)
     except Exception as exc:
+        cleanup_failed = True
         return {"closed": False, "error": str(exc)}
     return {"closed": True, "session_id": params["session_id"]}
 

@@ -26,7 +26,8 @@ async def run_job(job):
         process = await asyncio.create_subprocess_exec(
             sys.executable, '-m', 'research_mcp_service.worker_job', str(output),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL, start_new_session=True, cwd=directory)
+            stderr=asyncio.subprocess.DEVNULL, start_new_session=True, cwd=directory,
+            env={**os.environ, 'TMPDIR': directory})
         try:
             await process.communicate(json.dumps(job).encode())
             if process.returncode != 0 or not output.exists() or output.is_symlink():

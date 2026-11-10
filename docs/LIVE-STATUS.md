@@ -21,14 +21,15 @@ control/worker images remain as follows. Local retained images use the unpublish
 | Component | SHA-256 |
 |---|---|
 | Running control | `28aaba22373dbab40a7c34de30883e40a1f8af7297d44d629da978f3a5ea7d42` |
-| Worker | `047c3f08e529bf23fdecfa069412e9b0aee14b80d9974d5668ca3caabf3099a8` |
+| Worker | `c404021ec7ef58c08386218b43353e391a17eaef9e7b812b68cc437123b07cbc` |
 
-VPS images (`malgamoe/mcps`); egress is also retained locally:
+VPS control/egress images are published in `malgamoe/mcps`; worker is the
+VPS-local incremental scratch-lifetime image described below. Egress is retained locally too:
 
 | Component | SHA-256 |
 |---|---|
 | Running control | `37ea21ea1f0756a750c4d49e395f530a0286db628d65a9b74adadf6c46eda301` |
-| Worker | `e33c79cc4d46a216286a079f246210c6d2a19987696ca8c5d840dbe5aaaf8448` |
+| Worker | `915dcb4e1b9b0ccccb252ec6a87ada974738584d2072b73607ae9073d120e527` |
 | Egress | `4506a720dd51235fd44e2a1e01022079a03e49202da283d1eee473818c3e49b3` |
 
 ## Named credentials and request accounting
@@ -60,7 +61,8 @@ installation of this release have not been tested.
 
 ## Retained VPS capacity and browser release
 
-`docs-20261109-520d56b` control/worker remain active on the VPS,
+`docs-20261109-520d56b` control remains active on the VPS; the worker received
+the scratch-lifetime fix below. The earlier control/worker release was
 from source commit `520d56b`. Action field descriptions/examples, one-based
 numbering, form HTML serialization, defaults/scroll units and network subset/cursor
 semantics are clarified in the exposed tool schema/descriptions; behavior is unchanged.
@@ -92,6 +94,60 @@ VPS promotion passed 56 real MCP calls: search, four reader modes, storage/readb
 - 56 authenticated MCP calls pass, including append typing and completed history receipts; the endpoint still exposes 40 tools.
 - Both profiles pass private-navigation/subresource/WebSocket denial, public WSS and cancellation without surviving browser processes.
 - Only app/control/worker were recreated. Credentials, Redis/S3/search/egress containers and data volumes were preserved. These receipts describe the local deployment; VPS promotion is verified separately above.
+
+## Worker scratch-lifetime fix — local and VPS
+
+Local worker `/tmp` reached its 512 MiB tmpfs limit with abandoned Playwright
+profiles; health/search/cache remained available while fresh reads returned
+`worker_unavailable`. Tmpfs uses memory and may swap; it is not persistent disk.
+Local worker memory remains 2 GiB; `.env.runtime` sets `WORKER_MEMORY_LIMIT=2g`
+and `ACQUISITION_CONCURRENCY=2`. Compose defaults remain 3 GiB / three slots for
+other deployments.
+
+The deployed local worker routes disposable-job scratch through that job's `TMPDIR`,
+and browser profiles through per-session directories within a supervisor-owned
+controller directory. Successful session close removes its directory; controller
+reset kills/waits for its process group before removing all remaining scratch.
+Failed manager cleanup prevents new sessions until a controller reset. No broad
+shared-`/tmp` sweep is used. Keep 512 MiB pending measurements of legitimate
+concurrent usage; a larger limit alone does not repair leaked profiles.
+
+Built/deployed local image `research-mcp-local:scratch-lifetime-20261110`, pinned
+by the worker digest above. This incremental image reuses the prior verified
+worker's OS/dependencies and copies current source/controller; it is not published.
+177 host tests pass; packaged suite runs 177 tests with two expected Docker-only
+skips (host helper fixtures mounted read-only; production source/controller remain
+from the candidate image). Disposable network-none Chromium/Camoufox checks pass,
+including four open/close cycles per profile and closed-scratch removal assertions.
+Live MCP uncached light, Chromium and Camoufox reads pass; interactive sessions
+open/close successfully in both profiles. Worker scratch has no abandoned profiles
+or job directories after checks; `/tmp` uses about 8.7 MiB, primarily font cache.
+
+Only the local worker container was replaced; all other local stack container IDs
+are unchanged. Redis/S3 and credentials were untouched. Rollback/runtime backup,
+build/deployment/test logs and container identity receipts:
+`.state/scratch-lifetime-20261110/`; run its `rollback.sh` for the prior worker with
+prior local resource settings. The fix has functional coverage, not a multi-day
+soak or a fresh dependency/image build.
+
+VPS worker is now `research-mcp-vps:scratch-lifetime-20261110`, pinned by the
+VPS worker digest above. It was built on the VPS from its prior published worker,
+reusing dependencies with current source/controller. This is a VPS-local image,
+not a published registry release. Its 3 GiB RAM / two CPU cores / three acquisition
+slots / 512 MiB tmpfs limits are unchanged. Only its worker container and runtime
+worker-image pin changed; all other container IDs, credentials, storage, egress,
+TLS and Hermes were retained. Host source matches the worker fix; edits are
+uncommitted.
+
+VPS candidate: 177 packaged tests, two expected skips; offline Chromium/Camoufox
+fixtures pass with four open/close cycles each and scratch-removal assertions.
+Public trusted HTTPS checks: 40 tools, health/search, uncached light/Chromium/
+Camoufox reads and cached readbacks, two interactive open/close cycles per profile
+(18 post-rollout MCP calls), preexisting saved-document retrieval, anonymous 401.
+No abandoned job/session/Playwright directories remain after checks; tmpfs uses
+about 8.7 MiB font/cache baseline. Remote receipts/config/source backups and
+runtime-only rollback: `/root/research-scratch-20261110/`; local probe receipts:
+`.state/scratch-vps-20261110/`. No multi-day soak or fresh dependency build verified.
 
 ## Operations
 

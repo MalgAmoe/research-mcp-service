@@ -4,7 +4,7 @@ One owner per stack. Docker runs the MCP frontend, search, control, browser work
 
 **Base release:** `scrapling-20261108-223033-e9c05b2` (Linux amd64, 40 tools), built from source commit `e9c05b2dab16ff68b25c213623a27288c5b80d9f` and published in `malgamoe/mcps`. The VPS uses its app/control and worker images with the retained compatible egress image. Current deployment mix and verification limits: [LIVE-STATUS.md](LIVE-STATUS.md).
 
-Both frontends currently run published `auth-20261109-30c703e` (named credentials and request logs). VPS control/worker retain `docs-20261109-520d56b` (3 GiB worker, acquisition concurrency 3, clarified tool descriptions); exact current pins and checks are in LIVE-STATUS.md. The examples below select the base release. Local development build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md). Do not replace VPS image references with local-only development images.
+Both frontends currently run published `auth-20261109-30c703e` (named credentials and request logs). VPS control retains `docs-20261109-520d56b`; both workers now use deployment-local incremental `scratch-lifetime-20261110` images (not published). VPS retains 3 GiB worker RAM / acquisition concurrency 3. Exact current pins, checks and rollback are in LIVE-STATUS.md. The examples below select the base release. Local development build/check/rollback instructions: [SCRAPLING-LOCAL.md](SCRAPLING-LOCAL.md). Do not replace VPS image references with local-only development images.
 
 Commands below run from the repository root, not the `docs/` directory.
 
@@ -154,8 +154,13 @@ For updates: coordinate downtime and back up configuration plus consistent stopp
 
 ## Acquisition capacity and timing
 
-Compose allocates 3 GiB RAM / 2 CPU cores to the browser worker and sets
-`ACQUISITION_CONCURRENCY=3` consistently in frontend, control and worker. The
+Compose defaults to 3 GiB RAM / 2 CPU cores for the browser worker and sets
+`ACQUISITION_CONCURRENCY=3` consistently in frontend, control and worker.
+`WORKER_MEMORY_LIMIT` in `.env.runtime` overrides worker RAM without changing the
+512 MiB `/tmp` tmpfs cap. Local currently preserves 2 GiB RAM / two acquisition
+slots; VPS retains 3 GiB / three slots. Tmpfs consumes memory and can swap.
+The local and VPS scratch-lifetime workers clean per-job and per-session browser
+profiles rather than relying on more temporary capacity; see LIVE-STATUS.md. The
 setting accepts 1–4 (direct Python use defaults to 2). Interactive browser
 commands remain serialized; this is not three simultaneous browser commands.
 No other service resource limits are increased. Deploy matching updated app

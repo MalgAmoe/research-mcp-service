@@ -112,7 +112,16 @@ async def main():
                 assert sign * (after[axis] - before[axis]) > 0, (direction, before, after)
                 assert abs(after[1-axis] - before[1-axis]) <= 1, (direction, before, after)
                 print(json.dumps({'profile': profile, 'scroll': direction, 'before': before, 'after': after}), flush=True)
-            await controller.close_session({'session_id': sid})
+            scratch = Path(controller.sessions[sid].scratch)
+            assert scratch.is_dir()
+            assert (await controller.close_session({'session_id': sid}))['closed']
+            assert not scratch.exists(), 'Closed browser profile leaked'
+            # Repetition catches growth hidden by a single successful close.
+            for _ in range(3):
+                repeated = await controller.open_session({'url': url, 'profile': profile, 'wait_ms': 0})
+                scratch = Path(controller.sessions[repeated['session_id']].scratch)
+                assert (await controller.close_session({'session_id': repeated['session_id']}))['closed']
+                assert not scratch.exists(), 'Repeated browser profile leaked'
             print(json.dumps({'profile': profile, 'checks': 'refs/forms/chains/extract/shadow/screenshot/wait/find/history/route/scroll-axes/cleanup', 'passed': True}), flush=True)
         assert not controller.sessions
     finally:
